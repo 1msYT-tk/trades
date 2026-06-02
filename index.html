@@ -1830,6 +1830,11 @@
       border-color: var(--accent)
     }
 
+    .cal-nav-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed
+    }
+
     .cal-title {
       font-size: 16px;
       font-weight: 700
@@ -1858,16 +1863,31 @@
 
     .cal-day {
       background: var(--panel);
-      min-height: 72px;
-      padding: 6px;
+      min-height: 100px;
+      padding: 10px 8px;
       text-align: center;
       cursor: pointer;
       transition: background 0.12s;
       position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 4px;
     }
 
     .cal-day:hover {
       background: var(--bg3)
+    }
+
+    .cal-day.pos {
+      background: var(--green-soft);
+      color: var(--green)
+    }
+
+    .cal-day.neg {
+      background: var(--red-soft);
+      color: var(--red)
     }
 
     .cal-day.other-month {
@@ -1875,19 +1895,17 @@
     }
 
     .cal-day .day-num {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      margin-bottom: 3px;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 2px;
     }
 
     .cal-day .day-pnl {
-      font-size: 10.5px;
+      font-size: 13px;
       font-weight: 700;
       font-family: "Consolas", monospace;
       font-variant-numeric: tabular-nums;
-      line-height: 1.2;
-      word-break: break-all;
+      line-height: 1.3;
     }
 
     .cal-day.pos .day-pnl {
@@ -1896,6 +1914,22 @@
 
     .cal-day.neg .day-pnl {
       color: var(--red)
+    }
+    .cal-day .day-pct {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 500;
+      margin-top: 1px;
+    }
+
+    .cal-day.pos .day-pct {
+      color: var(--green);
+      opacity: 0.8
+    }
+
+    .cal-day.neg .day-pct {
+      color: var(--red);
+      opacity: 0.8
     }
 
     .cal-day.today {
@@ -2103,7 +2137,6 @@
         <div class="lang-toggle">
           <button id="themeToggle" class="theme-btn" title="Toggle theme"><span id="themeIcon">☾</span></button>
           <button data-lang="en" class="active">EN</button>
-          <button data-lang="de">DE</button>
         </div>
       </div>
       <nav class="nav" id="sideNav">
@@ -2267,7 +2300,7 @@
     // === i18n dictionary ===
     const I18N = {
       en: {
-        "app.title": "LEWIS",
+        "app.title": "Trade Buddy",
         "account.label": "Account:",
         "account.none": "No account",
         "common.save": "Save", "common.cancel": "Cancel", "common.delete": "Delete", "common.edit": "Edit",
@@ -2335,16 +2368,7 @@
         "import.storage": "Storage", "import.storageHint": "Browser IndexedDB · stays on this device",
         "import.noAccount": "Select or create an account first.",
         "import.modalTitle": "Import trades",
-        "import.howTitle": "How it works",
-        "import.howIntro": "LEWIS reads trade data from .txt (semicolon-separated), .html (MT5 Account History report), and .xlsx (Excel) files exported from MetaTrader 5.",
-        "import.step1": "Step 1 — Export from MetaTrader 5",
-        "import.step1Body": "Download the script below, place it in your MetaTrader 5 MQL5\\Scripts folder, then run it inside MetaTrader 5. The script writes a .txt file with all closed trades into MetaTrader's MQL5\\Files folder.",
-        "import.step2": "Step 2 — Upload here",
-        "import.step2Body": "Drop the exported .txt, .html or .xlsx file into the box below (or click the box to browse). Duplicate tickets are skipped automatically.",
-        "import.formatTitle": "File format reference",
-        "import.formatIntro": "One trade per line, 15 fields separated by semicolons (.txt). HTML and XLSX columns are auto-detected.",
         "import.dropTitle": "Drop .txt / .html / .xlsx file here or click to browse",
-        "import.dropHint": "Only the file content stays on this device — nothing is uploaded to a server.",
         "mc.simulations": "Number of simulations", "mc.scope": "Scope", "mc.scopeAll": "All trades", "mc.scopeStrategy": "Single strategy",
         "mc.scopeCombo": "Strategy & Symbol", "mc.combo": "Combination", "mc.startBalance": "Starting balance", "mc.tradesToSim": "Trades to simulate", "mc.median": "Median path",
         "mc.params": "Simulation parameters", "mc.overview": "Result overview", "mc.paths": "Simulation paths (median + 5%/95% band)",
@@ -2374,7 +2398,7 @@
         "weekday.4": "Thursday", "weekday.5": "Friday", "weekday.6": "Saturday",
         "chart.balance": "Balance", "chart.drawdown": "Drawdown", "chart.profit": "Profit", "chart.count": "Count",
         "chart.bySymbol": "P&L by symbol", "chart.byStrategy": "P&L by strategy", "chart.byWeekday": "P&L by weekday",
-        "chart.byMonth": "P&L by month", "chart.distribution": "P&L distribution", "chart.balanceCurve": "Balance curve",
+        "chart.byMonth": "P&L by month", "chart.byDay": "P&L by day", "chart.distribution": "P&L distribution", "chart.balanceCurve": "Balance curve",
         "chart.drawdownCurve": "Drawdown curve", "chart.performance": "Performance",
         "dashboard.recent": "Recent trades", "dashboard.welcome": "Welcome", "dashboard.welcomeBody": "Create an account in Settings to get started, then import a trade file.",
         "dashboard.perTrade": "Per Trade", "dashboard.annualized": "Annualized", "dashboard.grossWinLoss": "Gross Win / Loss",
@@ -2394,135 +2418,6 @@
         "error.notEnoughFields": "Not enough fields (got {n}, expected ≥14)",
         "error.noAccount": "No account selected", "error.noTrades": "No trades to analyze",
       },
-      de: {
-        "app.title": "LEWIS",
-        "account.label": "Konto:",
-        "account.none": "Kein Konto",
-        "common.save": "Speichern", "common.cancel": "Abbrechen", "common.delete": "Löschen", "common.edit": "Bearbeiten",
-        "common.add": "Hinzufügen", "common.create": "Erstellen", "common.confirm": "Bestätigen", "common.close": "Schließen",
-        "common.yes": "Ja", "common.no": "Nein", "common.search": "Suche", "common.filter": "Filter",
-        "common.reset": "Zurücksetzen", "common.import": "Import", "common.export": "Export", "common.all": "Alle", "common.selected": "ausgewählt",
-        "common.none": "Keine", "common.actions": "Aktionen", "common.loading": "Lädt...", "common.optional": "optional",
-        "common.required": "erforderlich", "common.run": "Ausführen", "common.generate": "Erstellen", "common.print": "Drucken",
-        "common.copy": "Kopieren", "common.from": "Von", "common.to": "Bis", "common.total": "Gesamt",
-        "common.unknown": "Unbekannt", "common.unassigned": "Nicht zugewiesen", "common.refresh": "Aktualisieren",
-        "common.apply": "Anwenden", "common.back": "Zurück", "common.next": "Weiter", "common.dateRange": "Zeitraum",
-        "nav.dashboard": "Übersicht", "nav.trades": "Trades", "nav.strategies": "Strategien",
-        "nav.analysis": "Analyse", "nav.montecarlo": "Monte Carlo", "nav.correlation": "Korrelation", "nav.calendar": "Kalender",
-        "nav.reports": "Berichte", "nav.logs": "Logs", "nav.settings": "Einstellungen",
-        "nav.section.overview": "Übersicht", "nav.section.setup": "Einrichtung", "nav.section.analyze": "Analyse",
-        "nav.section.forecast": "Prognose", "nav.section.system": "System",
-        "analysis.sub": "Trades nach Dimensionen aufschlüsseln",
-        "mc.sub": "Bootstrap-Simulation von Trade-Verläufen",
-        "corr.sub": "Tägliche G/V-Korrelation zwischen Gruppen",
-        "calendar.sub": "Täglicher Gewinn/Verlust nach Datum",
-        "report.sub": "Druckbare Performance-Berichte erstellen",
-        "log.sub": "Fehler und Ereignisse",
-        "settings.sub": "Konten, Einstellungen und Sicherung",
-        "dashboard.subtitle": "{n} Trades · {balance} Kapital",
-        "account.name": "Kontoname", "account.number": "Kontonummer", "account.broker": "Broker",
-        "account.balance": "Startkapital", "account.currency": "Währung", "account.create": "Konto erstellen",
-        "account.edit": "Konto bearbeiten", "account.delete": "Konto löschen", "account.deleteConfirm": "Dieses Konto mit allen Trades, Strategien und Logs löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
-        "account.empty": "Noch keine Konten. Erstelle dein erstes Konto, um zu beginnen.",
-        "account.tradeCount": "Trades", "account.strategyCount": "Strategien",
-        "strategy.name": "Strategiename", "strategy.magic": "Magic Number(n)", "strategy.magicHint": "Komma-separiert, z.B. 101, 102",
-        "strategy.description": "Beschreibung", "strategy.symbol": "Symbol", "strategy.timeframe": "Zeiteinheit",
-        "strategy.create": "Strategie erstellen", "strategy.edit": "Strategie bearbeiten", "strategy.empty": "Noch keine Strategien.",
-        "strategy.assignedTrades": "Zugewiesene Trades", "strategy.deleteConfirm": "Strategie löschen? Zugewiesene Trades werden auf 'nicht zugewiesen' gesetzt.",
-        "strategy.reassign": "Jetzt zuweisen", "strategy.reassignHint": "Trades mit passender Magic Number finden und entscheiden, ob bestehende Zuweisungen überschrieben werden sollen",
-        "strategy.reassignFound": "{n} Trade(s) gefunden mit Magic Number(n): {magic}",
-        "strategy.reassignAlready": "Bereits dieser Strategie zugewiesen",
-        "strategy.reassignUnassigned": "Derzeit nicht zugewiesen",
-        "strategy.reassignConflicting": "Einer anderen Strategie zugewiesen",
-        "strategy.reassignConflictList": "Konflikt-Trades",
-        "strategy.reassignNoMatches": "Keine Trades mit den eingestellten Magic Number(n) gefunden.",
-        "strategy.assignUnassignedOnly": "Nur nicht zugewiesene übernehmen",
-        "strategy.reassignAll": "Alle neu zuweisen (überschreiben)",
-        "strategy.currentlyLabel": "derzeit",
-        "trade.ticket": "Ticket", "trade.symbol": "Symbol", "trade.volume": "Volumen", "trade.direction": "Richtung",
-        "trade.long": "Long", "trade.short": "Short", "trade.openPrice": "Eröffnungspreis", "trade.closePrice": "Schlusspreis",
-        "trade.openTime": "Eröffnung", "trade.closeTime": "Schluss", "trade.profit": "Gewinn",
-        "trade.commission": "Kommission", "trade.swap": "Swap", "trade.netProfit": "Netto-Gewinn", "trade.sl": "SL", "trade.tp": "TP",
-        "trade.magic": "Magic", "trade.comment": "Kommentar", "trade.strategy": "Strategie", "trade.duration": "Dauer",
-        "trade.empty": "Keine Trades vorhanden. Importiere eine Trade-Datei, um zu starten.",
-        "metric.totalTrades": "Trades gesamt", "metric.buyTrades": "Long-Trades", "metric.sellTrades": "Short-Trades",
-        "metric.wins": "Gewinn-Trades", "metric.losses": "Verlust-Trades", "metric.winRate": "Trefferquote",
-        "metric.netProfit": "Netto-G/V", "metric.profitFactor": "Profit-Faktor", "metric.expectancy": "Erwartungswert",
-        "metric.maxDD": "Max. Drawdown", "metric.maxDDPct": "Max. DD %", "metric.recoveryFactor": "Recovery-Faktor",
-        "metric.sharpe": "Sharpe-Ratio", "metric.sharpeSubFull": "Gesamter Zeitraum", "metric.sharpeAnnualized": "Sharpe-Ratio (annualisiert, 252T)", "metric.sortino": "Sortino-Ratio", "metric.avgWin": "Ø Gewinn",
-        "metric.avgLoss": "Ø Verlust", "metric.bestTrade": "Bester Trade", "metric.worstTrade": "Schlechtester Trade",
-        "metric.maxWinStreak": "Max. Gewinnserie", "metric.maxLossStreak": "Max. Verlustserie",
-        "metric.avgHolding": "Ø Haltedauer", "metric.finalBalance": "Endkapital", "metric.startingBalance": "Startkapital",
-        "metric.longWinRate": "Long-Trefferquote", "metric.shortWinRate": "Short-Trefferquote",
-        "metric.totalCommission": "Kommissionen gesamt", "metric.totalSwap": "Swap gesamt", "metric.grossProfit": "Bruttogewinn", "metric.grossLoss": "Bruttoverlust",
-        "metric.section.volume": "Volumen", "metric.section.pnl": "G/V", "metric.section.risk": "Risiko", "metric.section.streaks": "Serien & Zeit", "metric.section.balance": "Kapital & Kosten",
-        "filter.from": "Von", "filter.to": "Bis", "filter.symbol": "Symbol", "filter.strategy": "Strategie",
-        "filter.direction": "Richtung", "filter.weekday": "Wochentag", "filter.magic": "Magic", "filter.clear": "Filter zurücksetzen",
-        "import.button": "Trades importieren", "import.title": "Import-Ergebnis", "import.imported": "Neu importiert",
-        "import.duplicates": "Übersprungen (Duplikate)", "import.errors": "Fehler", "import.file": "Datei",
-        "import.storage": "Speicherort", "import.storageHint": "Browser IndexedDB · bleibt auf diesem Gerät",
-        "import.noAccount": "Wähle oder erstelle zuerst ein Konto.",
-        "import.modalTitle": "Trades importieren",
-        "import.howTitle": "So funktioniert es",
-        "import.howIntro": "LEWIS liest Handelsdaten aus .txt- (semikolon-getrennt), .html- (MT5-Kontohistorie) und .xlsx-Dateien (Excel), die aus MetaTrader 5 exportiert wurden.",
-        "import.step1": "Schritt 1 — Export aus MetaTrader 5",
-        "import.step1Body": "Lade das untenstehende Skript herunter, lege es im MetaTrader-5-Ordner MQL5\\Scripts ab und führe es in MetaTrader 5 aus. Das Skript schreibt eine .txt-Datei mit allen geschlossenen Trades in den MQL5\\Files-Ordner von MetaTrader.",
-        "import.step2": "Schritt 2 — Hier hochladen",
-        "import.step2Body": "Ziehe die exportierte .txt-, .html- oder .xlsx-Datei in das Feld unten (oder klicke das Feld an, um zu suchen). Doppelte Ticketnummern werden automatisch übersprungen.",
-        "import.formatTitle": "Dateiformat-Referenz",
-        "import.formatIntro": "Ein Trade pro Zeile, 15 Felder durch Semikolon getrennt (.txt). HTML- und XLSX-Spalten werden automatisch erkannt.",
-        "import.dropTitle": ".txt / .html / .xlsx-Datei hier ablegen oder klicken zum Auswählen",
-        "import.dropHint": "Der Inhalt bleibt auf diesem Gerät — es wird nichts an einen Server gesendet.",
-        "mc.simulations": "Anzahl Simulationen", "mc.scope": "Bereich", "mc.scopeAll": "Alle Trades", "mc.scopeStrategy": "Einzelne Strategie",
-        "mc.scopeCombo": "Strategie & Symbol", "mc.combo": "Kombination", "mc.startBalance": "Startkapital", "mc.tradesToSim": "Zu simulierende Trades", "mc.median": "Median-Pfad",
-        "mc.params": "Simulations-Parameter", "mc.overview": "Ergebnis-Überblick", "mc.paths": "Simulationspfade (Median + 5%/95%-Band)",
-        "mc.allStrategies": "Alle Strategien", "mc.allSymbols": "Alle Symbole", "mc.symbol": "Symbol",
-        "mc.q5": "5%-Quantil (Worst Case)", "mc.q25": "25%-Quantil", "mc.qMedian": "Median (50%)", "mc.q75": "75%-Quantil", "mc.q95": "95%-Quantil (Best Case)",
-        "mc.avgFinal": "Ø Endergebnis", "mc.avgMaxDD": "Ø Max. Drawdown", "mc.simsTrades": "Simulationen × Trades",
-        "mc.placeholder": "Warte auf Simulation …", "mc.band": "5%–95%-Band",
-        "mc.run": "Simulation starten", "mc.results": "Ergebnisse", "mc.p5Balance": "5. Perzentil Endkapital",
-        "mc.p50Balance": "Median Endkapital", "mc.p95Balance": "95. Perzentil Endkapital", "mc.meanBalance": "Durchschnitt Endkapital",
-        "mc.p5MaxDD": "Bester Drawdown (P5)", "mc.p50MaxDD": "Median Drawdown", "mc.p95MaxDD": "Worst-Case Drawdown (P95)",
-        "mc.ruinProb": "Ruin-Wahrscheinlichkeit", "mc.sampleCurves": "Beispiel-Equity-Kurven",
-        "mc.distribution": "Verteilung der Endkapitale", "mc.report": "Risiko-Bericht",
-        "mc.empty": "Starte eine Simulation, um Ergebnisse zu sehen.",
-        "corr.groupBy": "Gruppieren nach", "corr.symbol": "Symbol", "corr.strategy": "Strategie",
-        "corr.matrix": "Korrelationsmatrix", "corr.report": "Korrelations-Bericht",
-        "corr.empty": "Mindestens zwei Gruppen mit überlappenden Handelstagen für die Analyse erforderlich.",
-        "report.summary": "Zusammenfassung", "report.scope": "Bereich", "report.scopeAccount": "Gesamtes Konto", "report.scopeStrategy": "Einzelne Strategie",
-        "report.generate": "Bericht erstellen", "report.print": "Drucken / Als PDF speichern", "report.heading": "Performance-Bericht",
-        "report.generatedAt": "Erstellt am", "report.empty": "Erstelle einen Bericht, um ihn hier zu sehen.",
-        "log.timestamp": "Zeitstempel", "log.level": "Stufe", "log.message": "Nachricht", "log.account": "Konto", "log.clear": "Logs löschen",
-        "log.empty": "Keine Log-Einträge.",
-        "settings.language": "Sprache", "settings.theme": "Theme", "settings.dark": "Dunkel", "settings.light": "Hell",
-        "settings.backup": "Alle Daten sichern", "settings.restore": "Aus Backup wiederherstellen", "settings.about": "Über",
-        "settings.aboutText": "Alle Daten werden lokal in der IndexedDB deines Browsers gespeichert. Erstelle regelmäßig Backups, um Datenverlust zu vermeiden.",
-        "settings.dangerZone": "Gefahrenbereich", "settings.deleteAll": "Alle Daten löschen", "settings.deleteAllConfirm": "Dies löscht ALLE Konten, Trades, Strategien und Logs unwiderruflich. Fortfahren?",
-        "weekday.0": "Sonntag", "weekday.1": "Montag", "weekday.2": "Dienstag", "weekday.3": "Mittwoch",
-        "weekday.4": "Donnerstag", "weekday.5": "Freitag", "weekday.6": "Samstag",
-        "chart.balance": "Kapital", "chart.drawdown": "Drawdown", "chart.profit": "Gewinn", "chart.count": "Anzahl",
-        "chart.bySymbol": "G/V nach Symbol", "chart.byStrategy": "G/V nach Strategie", "chart.byWeekday": "G/V nach Wochentag",
-        "chart.byMonth": "G/V nach Monat", "chart.distribution": "G/V-Verteilung", "chart.balanceCurve": "Kapitalkurve",
-        "chart.drawdownCurve": "Drawdown-Kurve", "chart.performance": "Performance",
-        "dashboard.recent": "Letzte Trades", "dashboard.welcome": "Willkommen", "dashboard.welcomeBody": "Erstelle in den Einstellungen ein Konto und importiere danach eine Trade-Datei.",
-        "dashboard.perTrade": "Pro Trade", "dashboard.annualized": "Annualisiert", "dashboard.grossWinLoss": "Bruttogewinn / -verlust",
-        "dashboard.recovery": "Recovery", "dashboard.avgPerTrade": "Ø {v} / Trade", "dashboard.winLossCount": "{w}G / {l}V",
-        "dashboard.longShort": "Long: {l} · Short: {s}",
-        "metric.avgWinLoss": "Ø Gewinn / Ø Verlust", "chart.winLoss": "Gewinn / Verlust",
-        "chart.topBottomSymbols": "Top / Flop Symbole",
-        "corr.strategySymbol": "Strategie & Symbol",
-        "toast.imported": "Trades erfolgreich importiert", "toast.importedFile": "Datei: {file}\nNeu: {new}  ·  Duplikate: {dup}  ·  Fehler: {err}\nGespeichert in: IndexedDB · {db}",
-        "toast.accountCreated": "Konto erstellt", "toast.accountUpdated": "Konto aktualisiert", "toast.accountDeleted": "Konto gelöscht",
-        "toast.strategyCreated": "Strategie erstellt", "toast.strategyUpdated": "Strategie aktualisiert", "toast.strategyDeleted": "Strategie gelöscht",
-        "toast.backupCreated": "Backup heruntergeladen", "toast.backupRestored": "Backup wiederhergestellt",
-        "toast.dataDeleted": "Alle Daten gelöscht", "toast.assigned": "{n} Trade(s) zugewiesen",
-        "toast.copied": "In Zwischenablage kopiert", "toast.logsCleared": "Logs gelöscht",
-        "error.fileRead": "Datei konnte nicht gelesen werden", "error.parseLine": "Zeile {line} konnte nicht gelesen werden",
-        "error.invalidDirection": "Ungültige Richtung: {v}", "error.invalidDate": "Ungültiges Datum: {v}",
-        "error.invalidNumber": "Ungültige Zahl", "error.invalidBackup": "Ungültige Backup-Datei",
-        "error.notEnoughFields": "Zu wenige Felder ({n}, erwartet ≥14)",
-        "error.noAccount": "Kein Konto ausgewählt", "error.noTrades": "Keine Trades zum Analysieren",
-      }
     };
 
     // === Global state ===
@@ -2542,6 +2437,8 @@
       mc: null,
       corr: null,
       report: null,
+      _calMonthIdx: 0,
+      _dbCalMonthIdx: 0,
     };
 
     // === Utility helpers ===
@@ -2574,7 +2471,7 @@
       if (n === Infinity) return "∞";
       if (n === -Infinity) return "-∞";
       if (n === null || n === undefined || isNaN(n)) return "—";
-      const locale = state.language === "de" ? "de-DE" : "en-US";
+      const locale = "en-US";
       return n.toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
     };
     const fmtInt = n => fmtNum(n, 0);
@@ -3589,7 +3486,10 @@
         finalBalance: startingBalance,
         balanceCurve: [{ time: Date.now(), balance: startingBalance, dd: 0 }],
         returns: [],
+        rValues: [],
+        avgR: 0, avgWinR: 0, avgLossR: 0, expectancyR: 0, rMultipleCount: 0,
         sortedTrades: [],
+        tradeSequence: [],
       };
     }
     function computeMetrics(trades, startingBalance = 0) {
@@ -3606,6 +3506,7 @@
       let cWinStreak = 0, mWinStreak = 0, cLossStreak = 0, mLossStreak = 0;
       let totalHoldingMs = 0, totalCommission = 0, totalSwap = 0;
       const returns = [];
+      const rValues = [], rWins = [], rLosses = [];
       for (const tr of sorted) {
         balance += tr.netProfit;
         returns.push(tr.netProfit);
@@ -3635,7 +3536,30 @@
         totalHoldingMs += (tr.closeTime - tr.openTime);
         totalCommission += tr.commission;
         totalSwap += tr.swap;
+        // R-Multiple calculation
+        if (tr.stopLoss && tr.stopLoss > 0 && tr.volume > 0) {
+          const initialRisk = Math.abs(tr.openPrice - tr.stopLoss) * tr.volume;
+          if (initialRisk > 0) {
+            tr._rMultiple = tr.netProfit / initialRisk;
+            rValues.push(tr._rMultiple);
+            if (tr.netProfit > 0) rWins.push(tr._rMultiple);
+            else if (tr.netProfit < 0) rLosses.push(tr._rMultiple);
+          }
+        } else if (tr._rMultiple === undefined) {
+          tr._rMultiple = null;
+        }
       }
+      // Build trade sequence for win/loss streak visualization
+      const tradeSequence = sorted.map((tr, i) => ({
+        profit: tr.netProfit,
+        isWin: tr.netProfit > 0,
+        isLoss: tr.netProfit < 0,
+        direction: tr.direction,
+        symbol: tr.symbol,
+        ticket: tr.ticket,
+        closeTime: tr.closeTime,
+        rMultiple: tr._rMultiple || null,
+      }));
       const total = sorted.length;
       const winRate = total ? wins / total : 0;
       const netProfit = balance - startingBalance;
@@ -3687,6 +3611,13 @@
         startingBalance,
         finalBalance: balance,
         balanceCurve, returns, sortedTrades: sorted,
+        rValues,
+        avgR: rValues.length ? rValues.reduce((s, v) => s + v, 0) / rValues.length : 0,
+        avgWinR: rWins.length ? rWins.reduce((s, v) => s + v, 0) / rWins.length : 0,
+        avgLossR: rLosses.length ? rLosses.reduce((s, v) => s + v, 0) / rLosses.length : 0,
+        expectancyR: rValues.length ? rValues.reduce((s, v) => s + v, 0) / rValues.length : 0,
+        rMultipleCount: rValues.length,
+        tradeSequence,
       };
     }
 
@@ -4381,7 +4312,121 @@
       drawBarChart(canvas, items, { ...opts, color: opts.color || cssVar("--accent", "#4f8ef7"), yFormat: shortNum });
     }
 
-    // === Donut / pie chart ===
+
+    function drawTradeSequence(canvas, sequence) {
+      const { ctx, W, H } = setupCanvas(canvas);
+      const padding = { top: 14, right: 14, bottom: 28, left: 14 };
+      const plotW = W - padding.left - padding.right;
+      const plotH = H - padding.top - padding.bottom;
+      const count = sequence.length;
+      if (count === 0) {
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = cssVar("--text-dim", "#888");
+        ctx.font = "12px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText("—", W / 2, H / 2);
+        canvas.onmousemove = null; canvas.onmouseleave = null;
+        return;
+      }
+
+      const greenC = cssVar("--green", "#2ecc71");
+      const redC = cssVar("--red", "#e74c3c");
+      const textColor = cssVar("--text-muted", "#8b91a8");
+
+      // Dynamic bar sizing
+      let barW = Math.max(2, Math.min(12, (plotW - 4) / count));
+      let gap = Math.min(3, barW * 0.25);
+      if (barW * count + gap * (count - 1) > plotW) { gap = 0; barW = plotW / count; }
+      const y0 = padding.top + plotH;
+      const barH = plotH - 8;
+
+      // Detect streaks for background shading
+      const streaks = [];
+      for (let i = 1, start = 0; i <= count; i++) {
+        if (i === count || sequence[i].isWin !== sequence[i - 1].isWin) {
+          streaks.push({ start, end: i - 1, length: i - start, isWin: sequence[start].isWin });
+          start = i;
+        }
+      }
+
+      // Draw background
+      ctx.clearRect(0, 0, W, H);
+      for (const s of streaks) {
+        if (s.length < 2) continue;
+        const x1 = padding.left + s.start * (barW + gap);
+        const x2 = padding.left + (s.end + 1) * (barW + gap) - gap;
+        ctx.fillStyle = s.isWin
+          ? cssVar("--green-soft", "#2ecc7122")
+          : cssVar("--red-soft", "#e74c3c22");
+        ctx.fillRect(x1, padding.top, x2 - x1, plotH);
+        if (s.length >= 3 && (x2 - x1) > 50) {
+          ctx.fillStyle = textColor;
+          ctx.font = "bold 9px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText(s.length + "x " + (s.isWin ? "▲" : "▼"), (x1 + x2) / 2, padding.top + 12);
+        }
+      }
+
+      // Draw bars
+      for (let i = 0; i < count; i++) {
+        const t = sequence[i];
+        const x = padding.left + i * (barW + gap);
+        const h = Math.max(1, barH * 0.8);
+        const y = t.isWin ? y0 - h : y0;
+        ctx.fillStyle = t.isWin ? greenC : (t.isLoss ? redC : cssVar("--text-dim", "#555d78"));
+        const r = Math.min(2, barW * 0.2);
+        roundRect(ctx, x, y, barW, h, r);
+        ctx.fill();
+      }
+
+      // X-axis labels
+      ctx.fillStyle = textColor;
+      ctx.font = "9px system-ui";
+      ctx.textAlign = "center";
+      const labelStride = Math.max(1, Math.floor(count / 50));
+      for (let i = 0; i < count; i += labelStride) {
+        const x = padding.left + i * (barW + gap) + barW / 2;
+        ctx.fillText("#" + (i + 1), x, padding.top + plotH + 16);
+      }
+      if (labelStride > 1 && (count - 1) % labelStride !== 0) {
+        const x = padding.left + (count - 1) * (barW + gap) + barW / 2;
+        ctx.fillText("#" + count, x, padding.top + plotH + 16);
+      }
+
+      // Tooltip
+      const tip = document.createElement("div");
+      tip.className = "chart-tip";
+      document.body.appendChild(tip);
+      canvas.onmousemove = function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const scaleX = canvas.width / rect.width;
+        const xData = mx * scaleX;
+        const i = Math.round((xData - padding.left) / (barW + gap) - 0.5);
+        if (i < 0 || i >= count) { tip.style.display = "none"; return; }
+        const t = sequence[i];
+        const x = padding.left + i * (barW + gap);
+        if (xData < x || xData > x + barW) { tip.style.display = "none"; return; }
+        tip.style.display = "block";
+        let lx = e.clientX + 12, ly = e.clientY - 8;
+        tip.style.left = lx + "px";
+        tip.style.top = ly + "px";
+        const tr = tip.getBoundingClientRect();
+        if (tr.right > window.innerWidth) tip.style.left = (e.clientX - tr.width - 12) + "px";
+        if (tr.bottom > window.innerHeight) tip.style.top = (e.clientY - tr.height - 8) + "px";
+        tip.innerHTML = '<div class="chart-tip-row"><span class="chart-tip-dot" style="background:' +
+          (t.isWin ? greenC : redC) + '"></span>#' + (i + 1) + ' · ' +
+          fmtDateShort(t.closeTime) + '</div>' +
+          '<div style="margin-top:3px">' + t.symbol + ' · ' + t.direction +
+          ' · <strong>' + fmtMoney(t.profit, 2, true) + '</strong></div>' +
+          (t.rMultiple !== null ? '<div style="margin-top:2px;color:' + textColor +
+          '">R: ' + fmtNum(t.rMultiple, 2) + '</div>' : '');
+      };
+      canvas.onmouseleave = function () { tip.style.display = "none"; };
+      canvas._tipCleanup = tip;
+    }
+
+        // === Donut / pie chart ===
     function drawDonut(canvas, segments, opts = {}) {
       const { ctx, W, H } = setupCanvas(canvas);
       const cx = W / 2, cy = H / 2 + 6;
@@ -4488,9 +4533,9 @@
           td.addEventListener("mousemove", e => {
             let tone = "";
             if (!isNaN(v)) {
-              if (v > 0.7) tone = `<div style="color:var(--red);font-size:11px;margin-top:2px">${state.language === "de" ? "Stark positiv – Risiko-Konzentration" : "Strongly positive – risk concentration"}</div>`;
-              else if (v < -0.7) tone = `<div style="color:var(--accent);font-size:11px;margin-top:2px">${state.language === "de" ? "Stark negativ – Hedge" : "Strongly negative – hedge"}</div>`;
-              else if (Math.abs(v) < 0.2) tone = `<div style="color:var(--green);font-size:11px;margin-top:2px">${state.language === "de" ? "Unabhängig – gute Diversifikation" : "Independent – good diversification"}</div>`;
+              if (v > 0.7) tone = `<div style="color:var(--red);font-size:11px;margin-top:2px">Strongly positive – risk concentration</div>`;
+              else if (v < -0.7) tone = `<div style="color:var(--accent);font-size:11px;margin-top:2px">Strongly negative – hedge</div>`;
+              else if (Math.abs(v) < 0.2) tone = `<div style="color:var(--green);font-size:11px;margin-top:2px">Independent – good diversification</div>`;
             }
             showChartTip(e, `<div style="font-weight:600">${a} ↔ ${b}</div><div><strong>${isNaN(v) ? "—" : v.toFixed(3)}</strong></div>${tone}`);
           });
@@ -4583,7 +4628,7 @@
       };
     }
 
-    function monteCarloReport(mc, scopeName, lang) {
+    function monteCarloReport(mc, scopeName) {
       if (!mc) return "";
       const ruinPct = (mc.ruinProbability * 100).toFixed(2);
       const sb = mc.startingBalance;
@@ -4591,31 +4636,7 @@
       const profitableP5 = mc.p5Balance > sb;
       const profitableP95 = mc.p95Balance > sb;
       const lines = [];
-      if (lang === "de") {
-        lines.push(`<h4>Bereich</h4><p><strong>${scopeName}</strong> · ${mc.simulations.toLocaleString("de-DE")} Simulationen über je ${mc.tradeCount} Trades.</p>`);
-        lines.push(`<h4>Zentrale Ergebnisse</h4><ul>
-      <li>Erwartetes Endkapital (Median): <strong>${fmtMoney(mc.p50Balance)}</strong></li>
-      <li>Worst-Case (5. Perzentil): <strong>${fmtMoney(mc.p5Balance)}</strong></li>
-      <li>Best-Case (95. Perzentil): <strong>${fmtMoney(mc.p95Balance)}</strong></li>
-      <li>Maximaler Drawdown (95. Perzentil, Worst-Case): <strong>${fmtMoney(mc.p95MaxDD)}</strong></li>
-      <li>Ruin-Wahrscheinlichkeit (Kapital ≤ 0): <strong>${ruinPct}%</strong></li>
-    </ul>`);
-        lines.push(`<h4>Bewertung</h4><ul>`);
-        if (profitableP5) lines.push(`<li>Auch im schlechtesten 5%-Szenario bleibt das Kapital über dem Startwert. Die Strategie zeigt sich sehr robust.</li>`);
-        else if (profitableP50) lines.push(`<li>Im Median erzielst du Gewinne, aber das untere 5%-Quantil endet unter dem Startwert. Plane Drawdown-Phasen mit ein.</li>`);
-        else lines.push(`<li>Selbst der Median liegt unter dem Startwert. Die historischen Trades reichen nicht, um konsistent profitabel zu sein.</li>`);
-        if (mc.ruinProbability > 0.05) lines.push(`<li>Die Ruin-Wahrscheinlichkeit von ${ruinPct}% ist erhöht. Reduziere die Positionsgröße oder erhöhe das Startkapital.</li>`);
-        else if (mc.ruinProbability > 0) lines.push(`<li>Die Ruin-Wahrscheinlichkeit ist mit ${ruinPct}% gering, aber nicht null.</li>`);
-        else lines.push(`<li>Keiner der simulierten Pfade führte zu einem Totalverlust.</li>`);
-        if (mc.p95MaxDD > sb * 0.3) lines.push(`<li>Der Worst-Case Drawdown von ${fmtMoney(mc.p95MaxDD)} entspricht ${((mc.p95MaxDD / sb) * 100).toFixed(1)}% des Startkapitals — ein signifikantes psychologisches und kapitalseitiges Risiko.</li>`);
-        lines.push(`</ul>`);
-        lines.push(`<h4>Empfehlungen</h4><ul>
-      <li>Plane Kapital, das mindestens den Worst-Case Drawdown (${fmtMoney(mc.p95MaxDD)}) abdecken kann, plus Puffer.</li>
-      <li>${profitableP50 ? "Behalte die aktuelle Vorgehensweise bei und überwache, ob neue Trades innerhalb des erwarteten Bereichs liegen." : "Überprüfe die Strategie kritisch, bevor du das gehandelte Volumen erhöhst."}</li>
-      <li>Wiederhole die Simulation regelmäßig mit neuen Trades, da sich die Eigenschaften der Strategie über die Zeit verändern können.</li>
-    </ul>`);
-      } else {
-        lines.push(`<h4>Scope</h4><p><strong>${scopeName}</strong> · ${mc.simulations.toLocaleString("en-US")} simulations of ${mc.tradeCount} trades each.</p>`);
+      lines.push(`<h4>Scope</h4><p><strong>${scopeName}</strong> · ${mc.simulations.toLocaleString("en-US")} simulations of ${mc.tradeCount} trades each.</p>`);
         lines.push(`<h4>Key results</h4><ul>
       <li>Expected final balance (median): <strong>${fmtMoney(mc.p50Balance)}</strong></li>
       <li>Worst case (5th percentile): <strong>${fmtMoney(mc.p5Balance)}</strong></li>
@@ -4637,7 +4658,6 @@
       <li>${profitableP50 ? "Keep the current approach and monitor that future trades stay within the expected range." : "Re-evaluate the strategy critically before increasing traded volume."}</li>
       <li>Re-run this simulation regularly as new trades come in — strategy characteristics drift over time.</li>
     </ul>`);
-      }
       return lines.join("");
     }
 
@@ -4683,9 +4703,9 @@
       const groupSums = {};
       for (const k of labels) groupSums[k] = vectors[k].reduce((s, v) => s + v, 0);
       return { labels, matrix, days, vectors, groupSums, groupCounts };
-    }
 
-    function correlationReport(c, lang) {
+
+    function correlationReport(c) {
       if (!c || c.labels.length < 2) return "";
       // Find top correlations (exclude diagonal)
       const pairs = [];
@@ -4697,30 +4717,7 @@
       const topNegative = pairs.filter(p => p.r < -0.5).slice(0, 5);
       const mostIndependent = pairs.filter(p => Math.abs(p.r) < 0.2).slice(0, 5);
       const lines = [];
-      if (lang === "de") {
-        lines.push(`<h4>Überblick</h4><p>${c.labels.length} Gruppen analysiert über ${c.days.length} Handelstage. Eine Korrelation von <strong>+1</strong> bedeutet, dass die Gruppen täglich identisch verdienen/verlieren; <strong>-1</strong> heißt entgegengesetzt; <strong>0</strong> bedeutet unabhängig.</p>`);
-        if (topPositive.length) {
-          lines.push(`<h4>Hohe positive Korrelationen (Risiko-Konzentration)</h4><ul>`);
-          topPositive.forEach(p => lines.push(`<li><strong>${p.a}</strong> ↔ <strong>${p.b}</strong>: ${p.r.toFixed(2)}</li>`));
-          lines.push(`</ul><p class="text-muted">Diese Gruppen bewegen sich gemeinsam — bei Verlust bei einer ist mit Verlusten bei der anderen zu rechnen. Im Worst-Case kann der Drawdown sich addieren statt sich auszugleichen.</p>`);
-        }
-        if (topNegative.length) {
-          lines.push(`<h4>Stark negative Korrelationen (Hedge-Effekt)</h4><ul>`);
-          topNegative.forEach(p => lines.push(`<li><strong>${p.a}</strong> ↔ <strong>${p.b}</strong>: ${p.r.toFixed(2)}</li>`));
-          lines.push(`</ul><p class="text-muted">Diese Paare gleichen sich gegenseitig aus — gut für Diversifikation, aber prüfe, ob es nicht einfach das Spiegelbild derselben Position ist.</p>`);
-        }
-        if (mostIndependent.length) {
-          lines.push(`<h4>Weitgehend unabhängig</h4><ul>`);
-          mostIndependent.forEach(p => lines.push(`<li><strong>${p.a}</strong> ↔ <strong>${p.b}</strong>: ${p.r.toFixed(2)}</li>`));
-          lines.push(`</ul><p class="text-muted">Diese Gruppen liefern echte Diversifikation. Eine Erhöhung des Anteils dieser Kombinationen kann das Gesamtrisiko reduzieren.</p>`);
-        }
-        lines.push(`<h4>Empfehlungen</h4><ul>
-      <li>Hoch korrelierte Gruppen wie ein einzelnes Risiko behandeln — Positionsgrößen ggf. summieren.</li>
-      <li>Bei größerem Kapital bevorzugt in schwach korrelierte Gruppen allokieren, um die Equity-Kurve zu glätten.</li>
-      <li>Korrelationen sind nicht stabil — Werte regelmäßig neu berechnen, besonders nach Marktphasen-Wechseln.</li>
-    </ul>`);
-      } else {
-        lines.push(`<h4>Overview</h4><p>${c.labels.length} groups analyzed across ${c.days.length} trading days. A correlation of <strong>+1</strong> means the groups gain and lose on the same days; <strong>-1</strong> means opposite; <strong>0</strong> means independent.</p>`);
+      lines.push(`<h4>Overview</h4><p>${c.labels.length} groups analyzed across ${c.days.length} trading days. A correlation of <strong>+1</strong> means the groups gain and lose on the same days; <strong>-1</strong> means opposite; <strong>0</strong> means independent.</p>`);
         if (topPositive.length) {
           lines.push(`<h4>High positive correlations (risk concentration)</h4><ul>`);
           topPositive.forEach(p => lines.push(`<li><strong>${p.a}</strong> ↔ <strong>${p.b}</strong>: ${p.r.toFixed(2)}</li>`));
@@ -4796,8 +4793,15 @@
         kpiCardHtml(t("metric.avgWinLoss"),
           `<div class="kpi-stack"><div class="pos">${escapeHtml(fmtMoney(m.avgWin, 2, true))}</div><div class="neg">${escapeHtml(fmtMoney(-m.avgLoss, 2, true))}</div></div>`,
           t("dashboard.perTrade")),
-        kpiCard(t("metric.expectancy"), fmtMoney(m.expectancy, 2, true),
-          { tone: tone(m.expectancy), sub: t("dashboard.perTrade") }),
+        kpiCard(t("metric.expectancy"), m.rMultipleCount > 0
+          ? fmtNum(m.expectancyR, 2) + "R"
+          : fmtMoney(m.expectancy, 2, true),
+          {
+            tone: tone(m.rMultipleCount > 0 ? m.expectancyR : m.expectancy),
+            sub: m.rMultipleCount > 0
+              ? "R per trade  ·  " + m.rMultipleCount + " with SL"
+              : t("dashboard.perTrade")
+          }),
       ];
     }
     function metricKpis(m) {
@@ -4891,6 +4895,7 @@
       row3.appendChild(winLossCard.card); row3.appendChild(symCard.card); row3.appendChild(wdCard.card);
       root.appendChild(row3);
       renderTradeCalendar(trades, root);
+      renderDashboardCalendar(trades, root, acc.startingBalance || 0);
       const balanceCanvas = balanceCard.canvas, monthCanvas = monthCard.canvas,
         wlCanvas = winLossCard.canvas, symCanvas = symCard.canvas, wdCanvas = wdCard.canvas;
 
@@ -5555,7 +5560,156 @@
     // === Year/Month grid (rows=years, cols=Jan..Dec + Total) ===
 
     // === Trading Calendar: day-by-day heatmap ===
-    function renderTradeCalendar(trades, root) {
+    
+        function renderDashboardCalendar(trades, root, startingBalance) {
+      var dayLookup = {};
+      var dayTrades = {};
+      var monthSet = new Set();
+      for (var ti = 0; ti < trades.length; ti++) {
+        var tr = trades[ti];
+        var d = new Date(tr.closeTime);
+        var yr = d.getFullYear();
+        var mo = d.getMonth() + 1;
+        var day = d.getDate();
+        var dateKey = yr + '-' + String(mo).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        if (!dayLookup[dateKey]) dayLookup[dateKey] = { netProfit: 0, count: 0 };
+        dayLookup[dateKey].netProfit += tr.netProfit;
+        dayLookup[dateKey].count++;
+        if (!dayTrades[dateKey]) dayTrades[dateKey] = [];
+        dayTrades[dateKey].push(tr);
+        monthSet.add(yr + '-' + String(mo).padStart(2, '0'));
+      }
+      var periods = Array.from(monthSet).sort();
+      if (periods.length === 0) return;
+
+      if (state._dbCalMonthIdx === undefined || state._dbCalMonthIdx >= periods.length) state._dbCalMonthIdx = 0;
+      if (state._dbCalMonthIdx < 0) state._dbCalMonthIdx = 0;
+
+      var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+      function renderMonth(container, currentKey) {
+        container.innerHTML = "";
+        var parts = currentKey.split("-");
+        var yr = parseInt(parts[0], 10);
+        var mo = parseInt(parts[1], 10);
+
+        var monthName = monthNames[mo - 1];
+        var firstDay = new Date(yr, mo - 1, 1).getDay();
+        var daysInMonth = new Date(yr, mo, 0).getDate();
+        var today = new Date();
+        var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+
+        var nav = el("div", { class: "cal-header" });
+        var prevBtn = el("button", { class: "cal-nav-btn", text: "\u2190 " + (t("common.back") || "Back"), onClick: function() { state._dbCalMonthIdx--; renderMonth(container, periods[state._dbCalMonthIdx]); } });
+        var title = el("div", { class: "cal-title", text: monthName + " " + yr });
+        var nextBtn = el("button", { class: "cal-nav-btn", text: (t("common.next") || "Next") + " \u2192", onClick: function() { state._dbCalMonthIdx++; renderMonth(container, periods[state._dbCalMonthIdx]); } });
+        if (state._dbCalMonthIdx <= 0) prevBtn.disabled = true;
+        if (state._dbCalMonthIdx >= periods.length - 1) nextBtn.disabled = true;
+        nav.appendChild(prevBtn);
+        nav.appendChild(title);
+        nav.appendChild(nextBtn);
+
+        var monthProfit = 0, monthCount = 0, winDays = 0, lossDays = 0;
+        for (var di = 1; di <= daysInMonth; di++) {
+          var dk = yr + "-" + String(mo).padStart(2, "0") + "-" + String(di).padStart(2, "0");
+          var entry = dayLookup[dk];
+          if (entry) {
+            monthProfit += entry.netProfit;
+            monthCount++;
+            if (entry.netProfit > 0) winDays++;
+            if (entry.netProfit < 0) lossDays++;
+          }
+        }
+
+        var summary = el("div", { class: "cal-summary" });
+        function kpi(label, value, cls) {
+          var k = el("div", { class: "kpi" + (cls ? " " + cls : "") });
+          k.appendChild(el("div", { class: "kpi-label", text: label }));
+          k.appendChild(el("div", { class: "kpi-value", text: value }));
+          return k;
+        }
+        summary.appendChild(kpi(monthName + " " + yr + " P&L", fmtMoney(monthProfit, 2, true), monthProfit > 0 ? "pos" : monthProfit < 0 ? "neg" : ""));
+        summary.appendChild(kpi("Trading Days", String(monthCount)));
+        summary.appendChild(kpi("Win Days", String(winDays), "pos"));
+        summary.appendChild(kpi("Loss Days", String(lossDays), "neg"));
+
+        var grid = el("div", { class: "cal-grid" });
+        dayLabels.forEach(function(dl) {
+          grid.appendChild(el("div", { class: "cal-day-header", text: dl }));
+        });
+        for (var i = 0; i < firstDay; i++) {
+          grid.appendChild(el("div", { class: "cal-day other-month" }));
+        }
+        for (var d = 1; d <= daysInMonth; d++) {
+          var dateKey = yr + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+          var entry = dayLookup[dateKey];
+          var isToday = dateKey === todayStr;
+          var cls = "cal-day";
+          if (isToday) cls += " today";
+          var cell = el("div", { class: cls });
+          cell.appendChild(el("div", { class: "day-num", text: String(d) }));
+          if (entry) {
+            var pnl = entry.netProfit;
+            var signCls = pnl > 0 ? "pos" : pnl < 0 ? "neg" : "";
+            cell.classList.add(signCls);
+            cell.appendChild(el("div", { class: "day-pnl", text: fmtMoney(pnl, 0, true) }));
+            if (startingBalance) {
+              var pct = (pnl / startingBalance) * 100;
+              cell.appendChild(el("div", { class: "day-pct", text: (pct > 0 ? "+" : "") + fmtNum(pct, 2) + "%" }));
+            }
+            cell.dataset.pnl = pnl;
+            cell.dataset.count = entry.count;
+            cell.dataset.datekey = dateKey;
+            cell.addEventListener("mousemove", function(e) {
+              var dpnl = parseFloat(this.dataset.pnl);
+              var dcount = parseInt(this.dataset.count, 10);
+              var dkey = this.dataset.datekey;
+              showChartTip(e, "<div style=\"font-weight:600\">" + dkey + "</div><div><strong>" + fmtMoney(dpnl, 2, true) + "</strong></div><div class=\"text-muted\" style=\"font-size:11px\">" + dcount + " " + t("nav.trades").toLowerCase() + "</div>");
+            });
+            cell.addEventListener("mouseleave", hideChartTip);
+            (function(tradesForDay, dk) {
+              cell.addEventListener("click", function(e) {
+                if (!tradesForDay || !tradesForDay.length) return;
+                var longLabel = t("trade.long");
+                var shortLabel = t("trade.short");
+                var header = "<div style=\"margin-bottom:12px;font-size:12px;color:var(--text-muted)\">" + dk + " &middot; " + tradesForDay.length + " " + t("nav.trades").toLowerCase() + "</div>";
+                var rows = "";
+                for (var ti = 0; ti < tradesForDay.length; ti++) {
+                  var tr = tradesForDay[ti];
+                  var pnlCls = tr.netProfit > 0 ? "pos" : tr.netProfit < 0 ? "neg" : "muted";
+                  var dirCls = tr.direction === "Long" ? "badge-long" : "badge-short";
+                  var dirLabel = tr.direction === "Long" ? longLabel : shortLabel;
+                  rows += "<tr style=\"border-bottom:1px solid var(--border)\"><td style=\"padding:5px 8px\">" + tr.symbol + "</td><td style=\"padding:5px 8px\"><span class=\"badge " + dirCls + "\">" + dirLabel + "</span></td><td style=\"padding:5px 8px;text-align:right\" class=\"num " + pnlCls + "\">" + fmtMoney(tr.netProfit, 2, true) + "</td><td style=\"padding:5px 8px;text-align:right\" class=\"num\">" + fmtNum(tr.volume, 2) + "</td><td style=\"padding:5px 8px;color:var(--text-dim)\">" + fmtDateShort(tr.closeTime) + "</td></tr>";
+                }
+                var content = el("div", {});
+                content.innerHTML = header + '<div class="table-wrap"><table style="width:100%;font-size:12px"><thead><tr><th style="padding:5px 8px;text-align:left;background:var(--bg3)">' + t("trade.symbol") + '</th><th style="padding:5px 8px;text-align:left;background:var(--bg3)">' + t("trade.direction") + '</th><th style="padding:5px 8px;text-align:right;background:var(--bg3)">' + t("trade.netProfit") + '</th><th style="padding:5px 8px;text-align:right;background:var(--bg3)">' + t("trade.volume") + '</th><th style="padding:5px 8px;text-align:left;background:var(--bg3)">Date</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+                showModal(dk, content);
+              });
+            })(dayTrades[dateKey], dateKey);
+          }
+          grid.appendChild(cell);
+        }
+        var totalCells = firstDay + daysInMonth;
+        var remaining = (7 - (totalCells % 7)) % 7;
+        for (var ri = 0; ri < remaining; ri++) {
+          grid.appendChild(el("div", { class: "cal-day other-month" }));
+        }
+
+        container.appendChild(nav);
+        container.appendChild(summary);
+        container.appendChild(el("div", { class: "card" }, [
+          el("div", { class: "card-header" }, [el("h3", { text: t("chart.byDay") })]),
+          grid,
+        ]));
+      }
+
+      var wrap = el("div", { style: "margin-top:18px" });
+      renderMonth(wrap, periods[state._dbCalMonthIdx]);
+      root.appendChild(wrap);
+    }
+
+function renderTradeCalendar(trades, root) {
       if (!trades || trades.length === 0) return;
       var DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       var MS_PER_DAY = 86400000;
@@ -5720,9 +5874,7 @@
       }
       const years = Object.keys(byYear).sort();
       if (years.length === 0) return el("div", { class: "empty", text: t("trade.empty") });
-      const monthNames = state.language === "de"
-        ? ["Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
-        : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const wrap = el("div", { style: "overflow-x:auto" });
       const table = el("table", { class: "month-grid" });
       const thead = el("thead");
@@ -5857,6 +6009,16 @@
         { label: t("metric.sortino"), value: fmtNum(m.sortino) },
       ]));
 
+      if (m.rMultipleCount > 0) {
+        list.appendChild(section("R-Multiple", [
+          { label: "Avg R", value: fmtNum(m.avgR, 2) + "R", tone: m.avgR > 0 ? "pos" : "neg" },
+          { label: "Avg win R", value: fmtNum(m.avgWinR, 2) + "R", tone: "pos" },
+          { label: "Avg loss R", value: fmtNum(-m.avgLossR, 2) + "R", tone: "neg" },
+          { label: "Expectancy (R)", value: fmtNum(m.expectancyR, 2) + "R", tone: m.expectancyR > 0 ? "pos" : "neg" },
+          { label: "Trades with SL", value: fmtInt(m.rMultipleCount) + " / " + fmtInt(m.total) },
+        ]));
+      }
+
       list.appendChild(section(t("metric.section.streaks") || "Streaks & timing", [
         { label: t("metric.maxWinStreak"), value: fmtInt(m.maxWinStreak), tone: "pos" },
         { label: t("metric.maxLossStreak"), value: fmtInt(m.maxLossStreak), tone: "neg" },
@@ -5988,6 +6150,54 @@
         const wdCard = makeChartCard(t("chart.byWeekday"));
         rowB.appendChild(distCard.card); rowB.appendChild(wdCard.card);
         content.appendChild(rowB);
+
+        // Row: R-Multiple distribution (if we have R data)
+        if (m.rMultipleCount > 0) {
+          const rCard = makeChartCard("R-Multiple distribution");
+          rCard.card.querySelector(".card-header").appendChild(
+            el("span", { class: "text-sm text-muted", style: "font-weight:400;text-transform:none;letter-spacing:0",
+              text:  m.rMultipleCount + " trades with SL  ·  Avg: " + fmtNum(m.avgR, 2) + "R  ·  Expectancy: " + fmtNum(m.expectancyR, 2) + "R" })
+          );
+          content.appendChild(rCard.card);
+          requestAnimationFrame(() => {
+            drawHistogram(rCard.canvas, m.rValues, { bins: 30, binFormat: v => fmtNum(v, 2) + "R" });
+          });
+        }
+
+        // Row: Trade sequence chart (win/loss streambars)
+        if (m.tradeSequence && m.tradeSequence.length >= 2) {
+          const seqCard = makeChartCard("Trade Sequence", "bar");
+          // Build subtitle stats
+          const curStreak = (() => {
+            let streak = 0;
+            const seq = m.tradeSequence;
+            if (seq.length === 0) return { type: '-', count: 0 };
+            const last = seq[seq.length - 1];
+            const targetWin = last.isWin;
+            for (let i = seq.length - 1; i >= 0; i--) {
+              const t = seq[i];
+              if ((t.isWin && targetWin) || (t.isLoss && !targetWin)) streak++;
+              else break;
+            }
+            return { type: targetWin ? 'W' : 'L', count: streak, isWin: targetWin };
+          })();
+          seqCard.card.querySelector(".card-header").appendChild(
+            el("span", { class: "text-sm text-muted", style: "font-weight:400;text-transform:none;letter-spacing:0",
+              text: m.tradeSequence.length + " trades  ·  Current streak: " + curStreak.count + curStreak.type +
+                "  ·  Max win streak: " + m.maxWinStreak + "  ·  Max loss streak: " + m.maxLossStreak })
+          );
+          content.appendChild(seqCard.card);
+          // Legend
+          const legend = el("div", { class: "chart-legend" }, [
+            el("span", {}, [el("span", { class: "dot", style: "background:" + cssVar("--green","#2ecc71") }), "Win"]),
+            el("span", {}, [el("span", { class: "dot", style: "background:" + cssVar("--red","#e74c3c") }), "Loss"]),
+            el("span", {}, [el("span", { class: "dot", style: "background:" + cssVar("--bg4","#242840") }), curStreak.count + "-trade " + curStreak.type + " streak"]),
+          ]);
+          seqCard.card.appendChild(legend);
+          requestAnimationFrame(() => {
+            drawTradeSequence(seqCard.canvas, m.tradeSequence);
+          });
+        }
 
         // Row C: symbol + strategy
         const rowC = el("div", { class: "grid grid-2 mb-16" });
@@ -6235,7 +6445,7 @@
     `;
 
         // ---- Risk report ----
-        reportBox.innerHTML = monteCarloReport(mc, mc.scopeName, state.language);
+        reportBox.innerHTML = monteCarloReport(mc, mc.scopeName);
 
         // ---- Legend for path chart ----
         const accentColor = cssVar("--accent", "#4f8ef7");
@@ -6319,7 +6529,7 @@
 
         const reportCard = el("div", { class: "card" });
         reportCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("corr.report") })]));
-        const reportBox = el("div", { class: "report-text", html: correlationReport(c, state.language) });
+        const reportBox = el("div", { class: "report-text", html: correlationReport(c) });
         reportCard.appendChild(reportBox);
         content.appendChild(reportCard);
 
@@ -6422,7 +6632,7 @@
         // Text summary
         const textCard = el("div", { class: "card" });
         textCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("report.summary") })]));
-        textCard.appendChild(el("div", { class: "report-text", html: textSummary(r, state.language) }));
+        textCard.appendChild(el("div", { class: "report-text", html: textSummary(r) }));
         content.appendChild(textCard);
 
         requestAnimationFrame(() => {
@@ -6483,31 +6693,9 @@
       card.appendChild(wrap);
       return { card, canvas };
     }
-    function textSummary(r, lang) {
+    function textSummary(r) {
       const m = r.metrics;
       const sign = m.netProfit > 0 ? "+" : "";
-      if (lang === "de") {
-        const lines = [];
-        lines.push(`<p>Über <strong>${m.total}</strong> Trades wurde ein Netto-Ergebnis von <strong>${sign}${fmtMoney(m.netProfit)}</strong> erzielt.</p>`);
-        lines.push(`<h4>Hauptkennzahlen</h4><ul>
-      <li>Trefferquote: ${fmtPct(m.winRate, 1)} (${m.wins} Gewinn / ${m.losses} Verlust)</li>
-      <li>Profit-Faktor: ${fmtNum(m.profitFactor)}</li>
-      <li>Erwartungswert pro Trade: ${fmtMoney(m.expectancy)}</li>
-      <li>Max. Drawdown: ${fmtMoney(m.maxDD)} (${fmtPct(m.maxDDPct, 1)})</li>
-      <li>Recovery-Faktor: ${fmtNum(m.recoveryFactor)}</li>
-      <li>Sharpe-Ratio: ${fmtNum(m.sharpe)} · Sortino-Ratio: ${fmtNum(m.sortino)}</li>
-      <li>Max. Gewinnserie: ${m.maxWinStreak} · Max. Verlustserie: ${m.maxLossStreak}</li>
-      <li>Ø Haltedauer: ${fmtDuration(m.avgHoldingMs)}</li>
-    </ul>`);
-        lines.push(`<h4>Beurteilung</h4><ul>`);
-        if (m.profitFactor >= 1.5) lines.push(`<li>Profit-Faktor ≥ 1.5 deutet auf eine robuste Strategie hin.</li>`);
-        else if (m.profitFactor >= 1.1) lines.push(`<li>Profit-Faktor zwischen 1.1 und 1.5 ist akzeptabel, aber wenig Spielraum für Streuung.</li>`);
-        else lines.push(`<li>Profit-Faktor unter 1.1 — Strategie hat aktuell keinen klaren Edge.</li>`);
-        if (m.maxDDPct > 0.3) lines.push(`<li>Drawdown über 30% ist sehr groß — Money-Management überprüfen.</li>`);
-        if (m.sharpe >= 1) lines.push(`<li>Sharpe-Ratio ≥ 1 deutet auf ein gutes Verhältnis von Rendite zu Volatilität.</li>`);
-        lines.push(`</ul>`);
-        return lines.join("");
-      }
       const lines = [];
       lines.push(`<p>Across <strong>${m.total}</strong> trades, the net result is <strong>${sign}${fmtMoney(m.netProfit)}</strong>.</p>`);
       lines.push(`<h4>Key figures</h4><ul>
@@ -6516,21 +6704,200 @@
     <li>Expectancy per trade: ${fmtMoney(m.expectancy)}</li>
     <li>Max drawdown: ${fmtMoney(m.maxDD)} (${fmtPct(m.maxDDPct, 1)})</li>
     <li>Recovery factor: ${fmtNum(m.recoveryFactor)}</li>
-    <li>Sharpe: ${fmtNum(m.sharpe)} · Sortino: ${fmtNum(m.sortino)}</li>
-    <li>Max win streak: ${m.maxWinStreak} · Max loss streak: ${m.maxLossStreak}</li>
+    <li>Sharpe: ${fmtNum(m.sharpe)} &middot; Sortino: ${fmtNum(m.sortino)}</li>
+    <li>Max win streak: ${m.maxWinStreak} &middot; Max loss streak: ${m.maxLossStreak}</li>
     <li>Avg holding time: ${fmtDuration(m.avgHoldingMs)}</li>
   </ul>`);
       lines.push(`<h4>Assessment</h4><ul>`);
-      if (m.profitFactor >= 1.5) lines.push(`<li>Profit factor ≥ 1.5 suggests a robust edge.</li>`);
+      if (m.profitFactor >= 1.5) lines.push(`<li>Profit factor >= 1.5 suggests a robust edge.</li>`);
       else if (m.profitFactor >= 1.1) lines.push(`<li>Profit factor between 1.1 and 1.5 is acceptable but leaves little margin for variance.</li>`);
-      else lines.push(`<li>Profit factor below 1.1 — there is no clear edge in the data.</li>`);
-      if (m.maxDDPct > 0.3) lines.push(`<li>Drawdown above 30% is large — re-examine money management.</li>`);
-      if (m.sharpe >= 1) lines.push(`<li>Sharpe ≥ 1 indicates a healthy return/volatility profile.</li>`);
+      else lines.push(`<li>Profit factor below 1.1 - there is no clear edge in the data.</li>`);
+      if (m.maxDDPct > 0.3) lines.push(`<li>Drawdown above 30% is large - re-examine money management.</li>`);
+      if (m.sharpe >= 1) lines.push(`<li>Sharpe >= 1 indicates a healthy return/volatility profile.</li>`);
       lines.push(`</ul>`);
       return lines.join("");
     }
-
     // === Tab rendering: Logs ===
+function renderCalendar() {
+      var acc = currentAccount();
+      if (!acc) {
+        $('#calendarContent').innerHTML = '<div class="empty"><span class="empty-icon">📅</span><p>' + t('account.empty') + '</p></div>';
+        return;
+      }
+      var allTrades = state.trades.filter(function(t) { return t.accountId === acc.id; });
+      if (!allTrades.length) {
+        $('#calendarContent').innerHTML = '<div class="empty"><span class="empty-icon">📅</span><p>' + t('trade.empty') + '</p></div>';
+        return;
+      }
+
+      // Build a lookup: dateKey (YYYY-MM-DD) -> { netProfit, count }
+      var dayLookup = {};
+      var dayTrades = {};
+      var monthSet = new Set();
+      for (var ti = 0; ti < allTrades.length; ti++) {
+        var tr = allTrades[ti];
+        var d = new Date(tr.closeTime);
+        var yr = d.getFullYear();
+        var mo = d.getMonth() + 1;
+        var day = d.getDate();
+        var dateKey = yr + '-' + String(mo).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        if (!dayLookup[dateKey]) dayLookup[dateKey] = { netProfit: 0, count: 0 };
+        dayLookup[dateKey].netProfit += tr.netProfit;
+        dayLookup[dateKey].count++;
+        if (!dayTrades[dateKey]) dayTrades[dateKey] = [];
+        dayTrades[dateKey].push(tr);
+        monthSet.add(yr + '-' + String(mo).padStart(2, '0'));
+      }
+
+      var periods = Array.from(monthSet).sort();
+      if (periods.length === 0) {
+        $('#calendarContent').innerHTML = '<div class="empty"><span class="empty-icon">📅</span><p>' + t('trade.empty') + '</p></div>';
+        return;
+      }
+
+      // Clamp the current month index
+      if (state._calMonthIdx === undefined || state._calMonthIdx >= periods.length) state._calMonthIdx = 0;
+      if (state._calMonthIdx < 0) state._calMonthIdx = 0;
+
+      var currentKey = periods[state._calMonthIdx];
+      var parts = currentKey.split("-");
+      var yr = parseInt(parts[0], 10);
+      var mo = parseInt(parts[1], 10);
+      var startingBalance = acc.startingBalance || 0;
+
+      var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var monthName = monthNames[mo - 1];
+
+      // Build the calendar grid
+      var firstDay = new Date(yr, mo - 1, 1).getDay(); // 0=Sun
+      var daysInMonth = new Date(yr, mo, 0).getDate();
+      var today = new Date();
+      var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+
+      var dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+      // Navigation header
+      var nav = el("div", { class: "cal-header" });
+      var prevBtn = el("button", { class: "cal-nav-btn", text: "\u2190 " + (t("common.back") || "Back"), onClick: function() { state._calMonthIdx--; renderCalendar(); } });
+      var title = el("div", { class: "cal-title", text: monthName + " " + yr });
+      var nextBtn = el("button", { class: "cal-nav-btn", text: (t("common.next") || "Next") + " \u2192", onClick: function() { state._calMonthIdx++; renderCalendar(); } });
+      if (state._calMonthIdx <= 0) prevBtn.disabled = true;
+      if (state._calMonthIdx >= periods.length - 1) nextBtn.disabled = true;
+      nav.appendChild(prevBtn);
+      nav.appendChild(title);
+      nav.appendChild(nextBtn);
+
+      // Month totals summary bar
+      var monthProfit = 0, monthCount = 0, winDays = 0, lossDays = 0;
+      for (var di = 1; di <= daysInMonth; di++) {
+        var dk = yr + "-" + String(mo).padStart(2, "0") + "-" + String(di).padStart(2, "0");
+        var entry = dayLookup[dk];
+        if (entry) {
+          monthProfit += entry.netProfit;
+          monthCount++;
+          if (entry.netProfit > 0) winDays++;
+          if (entry.netProfit < 0) lossDays++;
+        }
+      }
+
+      var summary = el("div", { class: "cal-summary" });
+      function kpi(label, value, cls) {
+        var k = el("div", { class: "kpi" + (cls ? " " + cls : "") });
+        k.appendChild(el("div", { class: "kpi-label", text: label }));
+        k.appendChild(el("div", { class: "kpi-value", text: value }));
+        return k;
+      }
+      summary.appendChild(kpi(monthName + " " + yr + " P&L", fmtMoney(monthProfit, 2, true), monthProfit > 0 ? "pos" : monthProfit < 0 ? "neg" : ""));
+      summary.appendChild(kpi("Trading Days", String(monthCount)));
+      summary.appendChild(kpi("Win Days", String(winDays), "pos"));
+      summary.appendChild(kpi("Loss Days", String(lossDays), "neg"));
+
+      // Calendar grid
+      var grid = el("div", { class: "cal-grid" });
+
+      // Day-of-week headers
+      dayLabels.forEach(function(dl) {
+        grid.appendChild(el("div", { class: "cal-day-header", text: dl }));
+      });
+
+      // Empty cells before the 1st
+      for (var i = 0; i < firstDay; i++) {
+        grid.appendChild(el("div", { class: "cal-day other-month" }));
+      }
+
+      // Day cells
+      for (var d = 1; d <= daysInMonth; d++) {
+        var dateKey = yr + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+        var entry = dayLookup[dateKey];
+        var isToday = dateKey === todayStr;
+
+        var cls = "cal-day";
+        if (isToday) cls += " today";
+
+        var cell = el("div", { class: cls });
+        cell.appendChild(el("div", { class: "day-num", text: String(d) }));
+
+        if (entry) {
+          var pnl = entry.netProfit;
+          var signCls = pnl > 0 ? "pos" : pnl < 0 ? "neg" : "";
+          cell.classList.add(signCls);
+          cell.appendChild(el("div", { class: "day-pnl", text: fmtMoney(pnl, 0, true) }));
+          if (startingBalance) {
+            var pct = (pnl / startingBalance) * 100;
+            cell.appendChild(el("div", { class: "day-pct", text: (pct > 0 ? "+" : "") + fmtNum(pct, 2) + "%" }));
+          }
+          cell.dataset.pnl = pnl;
+          cell.dataset.count = entry.count;
+          cell.dataset.datekey = dateKey;
+          cell.addEventListener("mousemove", function(e) {
+            var dpnl = parseFloat(this.dataset.pnl);
+            var dcount = parseInt(this.dataset.count, 10);
+            var dkey = this.dataset.datekey;
+            showChartTip(e, "<div style=\"font-weight:600\">" + dkey + "</div><div><strong>" + fmtMoney(dpnl, 2, true) + "</strong></div><div class=\"text-muted\" style=\"font-size:11px\">" + dcount + " " + t("nav.trades").toLowerCase() + "</div>");
+          });
+          cell.addEventListener("mouseleave", hideChartTip);
+          cell.addEventListener("click", function(e) {
+            var dkey = this.dataset.datekey;
+            var tradesForDay = dayTrades[dkey];
+            if (!tradesForDay || !tradesForDay.length) return;
+            var longLabel = t("trade.long");
+            var shortLabel = t("trade.short");
+            var header = "<div style=\"margin-bottom:12px;font-size:12px;color:var(--text-muted)\">" + dkey + " &middot; " + tradesForDay.length + " " + t("nav.trades").toLowerCase() + "</div>";
+            var rows = "";
+            for (var ti = 0; ti < tradesForDay.length; ti++) {
+              var tr = tradesForDay[ti];
+              var pnlCls = tr.netProfit > 0 ? "pos" : tr.netProfit < 0 ? "neg" : "muted";
+              var dirCls = tr.direction === "Long" ? "badge-long" : "badge-short";
+              var dirLabel = tr.direction === "Long" ? longLabel : shortLabel;
+              rows += "<tr style=\"border-bottom:1px solid var(--border)\"><td style=\"padding:5px 8px\">" + tr.symbol + "</td><td style=\"padding:5px 8px\"><span class=\"badge " + dirCls + "\">" + dirLabel + "</span></td><td style=\"padding:5px 8px;text-align:right\" class=\"num " + pnlCls + "\">" + fmtMoney(tr.netProfit, 2, true) + "</td><td style=\"padding:5px 8px;text-align:right\" class=\"num\">" + fmtNum(tr.volume, 2) + "</td><td style=\"padding:5px 8px;color:var(--text-dim)\">" + fmtDateShort(tr.closeTime) + "</td></tr>";
+            }
+            var content = el("div", {});
+            content.innerHTML = header + '<div class="table-wrap"><table style="width:100%;font-size:12px"><thead><tr><th style="padding:5px 8px;text-align:left;background:var(--bg3)">' + t("trade.symbol") + '</th><th style="padding:5px 8px;text-align:left;background:var(--bg3)">' + t("trade.direction") + '</th><th style="padding:5px 8px;text-align:right;background:var(--bg3)">' + t("trade.netProfit") + '</th><th style="padding:5px 8px;text-align:right;background:var(--bg3)">' + t("trade.volume") + '</th><th style="padding:5px 8px;text-align:left;background:var(--bg3)">Date</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+            showModal(dkey, content);
+          });
+        }
+
+        grid.appendChild(cell);
+      }
+
+      // Remaining empty cells to complete the last row
+      var totalCells = firstDay + daysInMonth;
+      var remaining = (7 - (totalCells % 7)) % 7;
+      for (var ri = 0; ri < remaining; ri++) {
+        grid.appendChild(el("div", { class: "cal-day other-month" }));
+      }
+
+      var content = $("#calendarContent");
+      content.innerHTML = "";
+      content.appendChild(el("div", { class: "section" }, [
+        nav,
+        summary,
+        el("div", { class: "card" }, [
+          el("div", { class: "card-header" }, [el("h3", { text: t("chart.byDay") })]),
+          grid,
+        ])
+      ]));
+    }
     function renderLogs() {
       const root = $("#logsContent");
       root.innerHTML = "";
@@ -6608,27 +6975,10 @@
 
       // Preferences
       const prefCard = el("div", { class: "card mb-16" });
-      prefCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("settings.language") + " / " + t("settings.theme") })]));
-      prefCard.appendChild(el("div", { class: "grid grid-2" }, [
-        el("div", { class: "form-row" }, [
-          el("label", { text: t("settings.language") }),
-          (() => {
-            const s = el("select", { onChange: async e => { state.language = e.target.value; await setMeta("language", state.language); applyI18N(); renderActiveTab(); } });
-            s.appendChild(el("option", { value: "en", text: "English" }));
-            s.appendChild(el("option", { value: "de", text: "Deutsch" }));
-            s.value = state.language;
-            return s;
-          })(),
-        ]),
+      prefCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("settings.theme") })]));
+      prefCard.appendChild(el("div", { class: "grid grid-1" }, [
         el("div", { class: "form-row" }, [
           el("label", { text: t("settings.theme") }),
-          (() => {
-            const s = el("select", { onChange: async e => { setTheme(e.target.value); } });
-            s.appendChild(el("option", { value: "dark", text: t("settings.dark") }));
-            s.appendChild(el("option", { value: "light", text: t("settings.light") }));
-            s.value = state.theme;
-            return s;
-          })(),
         ]),
       ]));
       root.appendChild(prefCard);
@@ -6939,7 +7289,7 @@
     function renderActiveTab() {
       const map = {
         dashboard: renderDashboard, trades: renderTrades, strategies: renderStrategies,
-        analysis: renderAnalysis, montecarlo: renderMonteCarlo, correlation: renderCorrelation,
+        calendar: renderCalendar, analysis: renderAnalysis, montecarlo: renderMonteCarlo, correlation: renderCorrelation,
         reports: renderReports, logs: renderLogs, settings: renderSettings,
       };
       const fn = map[state.activeTab];
@@ -6964,25 +7314,11 @@
       const content = el("div");
 
       // Step-by-step explanation
-      const intro = el("div", { class: "report-text", style: "margin-bottom:18px" });
-      intro.innerHTML = `
-    <h4>${escapeHtml(t("import.howTitle"))}</h4>
-    <p>${escapeHtml(t("import.howIntro"))}</p>
-    <p><strong>${escapeHtml(t("import.step1"))}</strong> &mdash; ${escapeHtml(t("import.step1Body"))}</p>
-    <p style="margin-left:14px"><a href="${scriptUrl}" download="${escapeHtml(scriptName)}">${escapeHtml(scriptName)}</a></p>
-    <p><strong>${escapeHtml(t("import.step2"))}</strong> &mdash; ${escapeHtml(t("import.step2Body"))}</p>
-    <h4 style="margin-top:14px">${escapeHtml(t("import.formatTitle"))}</h4>
-    <p>${escapeHtml(t("import.formatIntro"))}</p>
-    <div class="code-block" style="margin-top:6px">ticket;symbol;volume;direction;open_price;open_time;close_price;close_time;commission;swap;profit;sl;tp;magic;comment</div>
-  `;
-      content.appendChild(intro);
-
       // Drop zone
       const zone = el("div", { class: "uz", id: "importDropZone" });
       zone.innerHTML = `
     <div class="uz-icon">⤓</div>
     <p>${escapeHtml(t("import.dropTitle"))}</p>
-    <small>${escapeHtml(t("import.dropHint"))}</small>
   `;
       content.appendChild(zone);
 
@@ -7030,7 +7366,7 @@
         return;
       }
       // Load meta
-      state.language = await getMeta("language", "en");
+      state.language = "en";
       state.theme = await getMeta("theme", "dark");
       state.activeAccountId = await getMeta("activeAccountId", null);
       // Load entities
