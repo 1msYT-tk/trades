@@ -1932,6 +1932,14 @@
       opacity: 0.8
     }
 
+    .cal-day .day-trades {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-top: 3px;
+      letter-spacing: 0.2px;
+    }
+
     .cal-day.today {
       border: 2px solid var(--accent)
     }
@@ -2387,13 +2395,14 @@
         "corr.empty": "Need at least two groups with overlapping trading days for a correlation analysis.",
         "report.summary": "Summary", "report.scope": "Scope", "report.scopeAccount": "Whole account", "report.scopeStrategy": "Specific strategy",
         "report.generate": "Generate report", "report.print": "Print / Save as PDF", "report.heading": "Performance report",
-        "report.generatedAt": "Generated at", "report.empty": "Generate a report to see it here.",
+        "report.generatedAt": "Generated at", "report.empty": "Generate a report to see it here.", "report.tradeHistory": "Trade History",
         "log.timestamp": "Timestamp", "log.level": "Level", "log.message": "Message", "log.account": "Account", "log.clear": "Clear logs",
         "log.empty": "No log entries.",
         "settings.language": "Language", "settings.theme": "Theme", "settings.dark": "Dark", "settings.light": "Light",
         "settings.backup": "Backup all data", "settings.restore": "Restore from backup", "settings.about": "About",
         "settings.aboutText": "All data is stored locally in your browser's IndexedDB. Use Backup regularly to avoid data loss.",
         "settings.dangerZone": "Danger zone", "settings.deleteAll": "Delete all data", "settings.deleteAllConfirm": "This will permanently delete ALL accounts, trades, strategies and logs. Continue?",
+        "settings.deleteAccountData": "Delete account data", "settings.deleteAccountDataConfirm": "This will delete all trades, strategies and logs for this account. The account will be kept. Continue?",
         "weekday.0": "Sunday", "weekday.1": "Monday", "weekday.2": "Tuesday", "weekday.3": "Wednesday",
         "weekday.4": "Thursday", "weekday.5": "Friday", "weekday.6": "Saturday",
         "chart.balance": "Balance", "chart.drawdown": "Drawdown", "chart.profit": "Profit", "chart.count": "Count",
@@ -2887,6 +2896,90 @@
       return { trades, errors };
     }
 
+    // === MT5 Trade History Report parsing (Account History HTML export) ===
+    function parseMT5TradeHistoryReport(htmlText) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlText, "text/html");
+      const tables = doc.querySelectorAll("table");
+      if (!tables.length) return { trades: [], errors: [{ line: 0, raw: "", reason: "No table found" }] };
+      const rows = tables[0].querySelectorAll("tr");
+      let headerRow = -1;
+      for (let ri = 0; ri < rows.length; ri++) {
+        const texts = Array.from(rows[ri].querySelectorAll("td, th")).map(c => c.textContent.trim().toLowerCase());
+        if (texts.some(t => t === "positions") || texts.some(t => t === "trade history report")) {
+          headerRow = ri + 1;
+          break;
+        }
+      }
+      if (headerRow < 0 || headerRow >= rows.length) {
+        return { trades: [], errors: [{ line: 0, raw: "", reason: "Could not find Positions header" }] };
+      }
+      const trades = [];
+      const errors = [];
+      for (let ri = headerRow + 1; ri < rows.length; ri++) {
+        const cells = rows[ri].querySelectorAll("td");
+        if (cells.length < 5) continue;
+        const cellTexts = Array.from(cells).map(c => c.textContent.trim());
+        // MT5 Trade History Report columns:
+        // [0]=open time, [1]=ticket, [2]=symbol, [3]=type, [4]=hidden(colspan=8),
+        // [5]=volume, [6]=open price, [7]=S/L, [8]=T/P, [9]=close time,
+        // [10]=close price, [11]=commission, [12]=swap, [13]=profit
+        const ticket = cellTexts[1];
+        if (!ticket) continue;
+        const direction = parseDirection(cellTexts[3]);
+        if (!direction) {
+          errors.push({ line: ri + 1, raw: cellTexts.join(" | "), reason: "Invalid direction: " + cellTexts[3] });
+          continue;
+        }
+        const openTime = parseDateTime(cellTexts[0]);
+        if (!openTime) {
+          errors.push({ line: ri + 1, raw: cellTexts.join(" | "), reason: "Invalid open date: " + cellTexts[0] });
+          continue;
+        }
+        const closeTime = parseDateTime(cellTexts[9]);
+        if (!closeTime) {
+          errors.push({ line: ri + 1, raw: cellTexts.join(" | "), reason: "Invalid close date" });
+          continue;
+        }
+        const volume = parseFloatSafe(cellTexts[5] || "0");
+        let openPrice = parseFloatSafe(cellTexts[6] || "0");
+        let closePrice = parseFloatSafe(cellTexts[10] || "0");
+        const stopLoss = parseFloatSafe(cellTexts[7] || "0");
+        const takeProfit = parseFloatSafe(cellTexts[8] || "0");
+        const commission = parseFloatSafe(cellTexts[11] || "0");
+        const swap = parseFloatSafe(cellTexts[12] || "0");
+        const profit = parseFloatSafe(cellTexts[13] || "0");
+        if (openTime > closeTime) {
+          [openTime, closeTime] = [closeTime, openTime];
+          [openPrice, closePrice] = [closePrice, openPrice];
+        }
+        const trade = {
+          ticket: ticket,
+          symbol: cellTexts[2] || "",
+          volume: volume,
+          direction: direction,
+          openPrice: openPrice,
+          closePrice: closePrice,
+          openTime: openTime,
+          closeTime: closeTime,
+          commission: commission,
+          swap: swap,
+          profit: profit,
+          stopLoss: stopLoss,
+          takeProfit: takeProfit,
+          magicNumber: "",
+          comment: "",
+          strategyId: null,
+          netProfit: profit + commission + swap,
+        };
+        trades.push(trade);
+      }
+      if (trades.length === 0 && errors.length === 0) {
+        errors.push({ line: 0, raw: "", reason: "No trades found in Trade History report" });
+      }
+      return { trades, errors };
+    }
+
     // === Strategy Tester HTML report parsing (MT5 export) ===
     function parseStrategyTesterHTMLReport(htmlText) {
       const parser = new DOMParser();
@@ -3056,7 +3149,205 @@
       // Excel epoch is Jan 1, 1900 (with the known Feb 29, 1900 bug)
       const epoch = new Date(Date.UTC(1899, 11, 30));
       const ms = epoch.getTime() + serial * 86400000;
-      return isNaN(ms) ? null : ms;
+    }
+
+    // === MT5 Trade History Report XLSX parsing ===
+    function parseMT5TradeHistoryXLSX(workbook) {
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return { trades: [], errors: [{ line: 0, raw: "", reason: "No sheets found in workbook" }] };
+      }
+      const sheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+      if (!data || data.length < 9) {
+        return { trades: [], errors: [{ line: 0, raw: "", reason: "Not enough rows in workbook" }] };
+      }
+      // Data starts at row index 7 (0-based), header at row index 6
+      const trades = [];
+      const errors = [];
+      for (let ri = 7; ri < data.length; ri++) {
+        const row = data[ri];
+        if (!row || !row.length || row.every(c => c === "" || c === null || c === undefined)) continue;
+        // Columns: [0]=Time(open), [1]=Position(ticket), [2]=Symbol, [3]=Type(direction),
+        // [4]=Volume, [5]=Price(open), [6]=S/L, [7]=T/P, [8]=Time(close), [9]=Price(close),
+        // [10]=Commission, [11]=Swap, [12]=Profit
+        const ticket = String(row[1] ?? "").trim();
+        if (!ticket) continue;
+        const direction = parseDirection(row[3]);
+        if (!direction) {
+          errors.push({ line: ri + 1, raw: row.join(" | "), reason: "Invalid direction: " + row[3] });
+          continue;
+        }
+        const openTime = parseDateTime(String(row[0] ?? "").trim());
+        if (!openTime) {
+          errors.push({ line: ri + 1, raw: row.join(" | "), reason: "Invalid open date: " + row[0] });
+          continue;
+        }
+        const closeTime = parseDateTime(String(row[8] ?? "").trim());
+        if (!closeTime) {
+          errors.push({ line: ri + 1, raw: row.join(" | "), reason: "Invalid close date" });
+          continue;
+        }
+        const volume = parseFloatSafe(row[4]);
+        let openPrice = parseFloatSafe(row[5]);
+        let closePrice = parseFloatSafe(row[9]);
+        const stopLoss = parseFloatSafe(row[6]);
+        const takeProfit = parseFloatSafe(row[7]);
+        const commission = parseFloatSafe(row[10]);
+        const swap = parseFloatSafe(row[11]);
+        const profit = parseFloatSafe(row[12]);
+        if (openTime > closeTime) {
+          [openTime, closeTime] = [closeTime, openTime];
+          [openPrice, closePrice] = [closePrice, openPrice];
+        }
+        const trade = {
+          ticket: ticket,
+          symbol: String(row[2] ?? "").trim(),
+          volume: volume,
+          direction: direction,
+          openPrice: openPrice,
+          closePrice: closePrice,
+          openTime: openTime,
+          closeTime: closeTime,
+          commission: commission,
+          swap: swap,
+          profit: profit,
+          stopLoss: stopLoss,
+          takeProfit: takeProfit,
+          magicNumber: "",
+          comment: "",
+          strategyId: null,
+          netProfit: profit + commission + swap,
+        };
+        trades.push(trade);
+      }
+      if (trades.length === 0 && errors.length === 0) {
+        errors.push({ line: 0, raw: "", reason: "No trades found in Trade History Report XLSX" });
+      }
+      return { trades, errors };
+    }
+
+    // === MT5 Strategy Tester Report XLSX parsing ===
+    function parseStrategyTesterXLSX(workbook) {
+      var sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return { trades: [], errors: [{ line: 0, raw: "", reason: "No sheets found" }], startingBalance: 0 };
+      }
+      var sheet = workbook.Sheets[sheetName];
+      var data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+      if (!data || data.length < 5) {
+        return { trades: [], errors: [{ line: 0, raw: "", reason: "Not enough rows" }], startingBalance: 0 };
+      }
+
+      // Find the "Deals" section header row
+      var dealsRow = -1;
+      for (var ri = 0; ri < data.length; ri++) {
+        var row = data[ri];
+        if (row && String(row[0] || "").trim().toLowerCase() === "deals") {
+          dealsRow = ri;
+          break;
+        }
+      }
+      if (dealsRow < 0 || dealsRow + 2 >= data.length) {
+        return { trades: [], errors: [{ line: 0, raw: "", reason: "Could not find Deals section" }], startingBalance: 0 };
+      }
+
+      // Collect all deals (data starts at dealsRow + 2, after the column header row)
+      var allDeals = [];
+      var startingBalance = 0;
+      for (var ri = dealsRow + 2; ri < data.length; ri++) {
+        var row = data[ri];
+        if (!row || !row.length || row.every(function(c) { return c === "" || c === null || c === undefined; })) continue;
+        // Skip rows that don't have at least a deal number
+        var dealStr = String(row[1] || "").trim();
+        if (!dealStr) continue;
+        // Skip non-numeric deal values (summary rows)
+        if (isNaN(parseInt(dealStr, 10))) continue;
+
+        var type = String(row[3] || "").trim().toLowerCase();
+        var direction = String(row[4] || "").trim().toLowerCase();
+
+        // Extract starting balance from balance/credit entries
+        if (type === "balance" || type === "credit") {
+          if (!startingBalance && row[10] !== undefined && row[10] !== null) {
+            startingBalance = parseFloatSafe(row[10]);
+          }
+          continue;
+        }
+
+        // Only process in/out deals
+        if (direction !== "in" && direction !== "out") continue;
+
+        allDeals.push({
+          time: String(row[0] || "").trim(),
+          deal: dealStr,
+          symbol: String(row[2] || "").trim(),
+          type: type,
+          direction: direction,
+          volume: parseFloatSafe(row[5]),
+          price: parseFloatSafe(row[6]),
+          order: String(row[7] || "").trim(),
+          commission: parseFloatSafe(row[8]),
+          swap: parseFloatSafe(row[9]),
+          profit: parseFloatSafe(row[10]),
+          comment: String(row[12] || "").trim(),
+          row: ri + 1,
+        });
+      }
+
+      // Pair "in" and "out" deals to form complete trades
+      var trades = [];
+      var errors = [];
+      var pendingIns = [];
+      for (var di = 0; di < allDeals.length; di++) {
+        var d = allDeals[di];
+        if (d.direction === "in") {
+          pendingIns.push(d);
+        } else if (d.direction === "out" && pendingIns.length > 0) {
+          // Match with the first pending "in" for the same symbol
+          var matchIdx = -1;
+          for (var pi = 0; pi < pendingIns.length; pi++) {
+            if (pendingIns[pi].symbol === d.symbol) { matchIdx = pi; break; }
+          }
+          if (matchIdx < 0) matchIdx = 0;
+          var openDeal = pendingIns.splice(matchIdx, 1)[0];
+          var openTime = parseDateTime(openDeal.time);
+          var closeTime = parseDateTime(d.time);
+          var direction = parseDirection(openDeal.type);
+          if (!direction) {
+            errors.push({ line: d.row, raw: openDeal.time + " | " + d.time, reason: "Invalid direction from type: " + openDeal.type });
+            continue;
+          }
+          if (!openTime || !closeTime) {
+            errors.push({ line: d.row, raw: openDeal.time + " | " + d.time, reason: "Invalid date(s)" });
+            continue;
+          }
+          trades.push({
+            ticket: d.order || openDeal.order,
+            symbol: d.symbol,
+            volume: openDeal.volume,
+            direction: direction,
+            openPrice: openDeal.price,
+            closePrice: d.price,
+            openTime: openTime,
+            closeTime: closeTime,
+            commission: openDeal.commission + d.commission,
+            swap: openDeal.swap + d.swap,
+            profit: d.profit,
+            stopLoss: 0,
+            takeProfit: 0,
+            magicNumber: "",
+            comment: d.comment || openDeal.comment,
+            strategyId: null,
+            netProfit: d.profit + openDeal.commission + d.commission + openDeal.swap + d.swap,
+          });
+        }
+      }
+
+      if (trades.length === 0 && errors.length === 0) {
+        errors.push({ line: 0, raw: "", reason: "No trade pairs (in/out) found in Strategy Tester XLSX report" });
+      }
+      return { trades: trades, errors: errors, startingBalance: startingBalance };
     }
 
     function parseXLSXTrades(workbook) {
@@ -3225,12 +3516,22 @@
       let parsedTrades, errors;
 
       if (name.endsWith(".html")) {
-        const text = await new Promise((res, rej) => {
+        // Read as ArrayBuffer first to detect UTF-16 BOM (MT5 exports UTF-16 LE)
+        const buf = await new Promise((res, rej) => {
           const r = new FileReader();
           r.onload = () => res(r.result);
           r.onerror = () => rej(r.error);
-          r.readAsText(file);
+          r.readAsArrayBuffer(file);
         });
+        const bytes = new Uint8Array(buf);
+        let text;
+        if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+          text = new TextDecoder("utf-16le").decode(buf);
+        } else if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+          text = new TextDecoder("utf-16be").decode(buf);
+        } else {
+          text = new TextDecoder("utf-8").decode(buf);
+        }
         // Detect if this is a Strategy Tester report vs Account History
         let result;
         if (text.toLowerCase().includes("strategy tester report")) {
@@ -3239,6 +3540,8 @@
             account.startingBalance = result.startingBalance;
             await dbPut("accounts", account);
           }
+        } else if (text.toLowerCase().includes("trade history report")) {
+          result = parseMT5TradeHistoryReport(text);
         } else {
           result = parseHTMLTradeReport(text);
         }
@@ -3258,7 +3561,27 @@
           r.readAsArrayBuffer(file);
         });
         const workbook = XLSX.read(buf, { type: "array" });
-        const result = parseXLSXTrades(workbook);
+        // Detect MT5 Trade History Report format
+        let result;
+        const _sheetName = workbook.SheetNames[0];
+        if (_sheetName) {
+          const _sheet = workbook.Sheets[_sheetName];
+          const _rawData = XLSX.utils.sheet_to_json(_sheet, { header: 1, defval: "", raw: true });
+          const _firstRows = _rawData.slice(0, 10).map(function(r) { return String(r[0] || ""); }).join(" ");
+          if (_firstRows.toLowerCase().includes("trade history report")) {
+            result = parseMT5TradeHistoryXLSX(workbook);
+          } else if (_firstRows.toLowerCase().includes("strategy tester report")) {
+            result = parseStrategyTesterXLSX(workbook);
+            if (result.startingBalance > 0) {
+              account.startingBalance = result.startingBalance;
+              await dbPut("accounts", account);
+            }
+          } else {
+            result = parseXLSXTrades(workbook);
+          }
+        } else {
+          result = parseXLSXTrades(workbook);
+        }
         parsedTrades = result.trades;
         errors = result.errors;
       } else {
@@ -3960,9 +4283,15 @@
           const color = seriesColors[idx];
           const pts = allPts[idx];
           if (s.fill && pts.length > 1) {
-            const grad = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotH);
-            grad.addColorStop(0, color + "33");
-            grad.addColorStop(1, color + "05");
+            var grad = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotH);
+            if (s.fillGradient) {
+              for (var fi = 0; fi < s.fillGradient.length; fi++) {
+                grad.addColorStop(s.fillGradient[fi].offset, s.fillGradient[fi].color);
+              }
+            } else {
+              grad.addColorStop(0, color + "33");
+              grad.addColorStop(1, color + "05");
+            }
             ctx.fillStyle = s.fillColor || grad;
             const baseY = padding.top + plotH;
             ctx.beginPath();
@@ -3986,13 +4315,24 @@
             ctx.closePath();
             ctx.fill();
           }
-          ctx.strokeStyle = color;
-          ctx.lineWidth = s.lineWidth || 2;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          ctx.beginPath();
-          smoothPath(ctx, pts, tension);
-          ctx.stroke();
+          if (s.segmentColor) {
+            ctx.lineWidth = s.lineWidth || 2;
+            for (var si = 0; si < pts.length - 1; si++) {
+              ctx.strokeStyle = s.segmentColor(s.data[si], s.data[si + 1], si);
+              ctx.beginPath();
+              ctx.moveTo(pts[si].x, pts[si].y);
+              ctx.lineTo(pts[si + 1].x, pts[si + 1].y);
+              ctx.stroke();
+            }
+          } else {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = s.lineWidth || 2;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            smoothPath(ctx, pts, tension);
+            ctx.stroke();
+          }
         });
         ctx.restore();
       }
@@ -4084,11 +4424,11 @@
       const textColor = cssVar("--text-muted", "#8b91a8");
 
       const barW = plotW / items.length;
-      const barInner = Math.max(2, barW * 0.72);
+      const barInner = Math.max(opts.macd ? 1 : 2, barW * (opts.macd ? 0.95 : 0.72));
       const greenC = cssVar("--green", "#2ecc71");
       const redC = cssVar("--red", "#e74c3c");
       const neutralC = cssVar("--accent", "#4f8ef7");
-      const corner = Math.min(5, barInner * 0.22);
+      const corner = opts.macd ? 0 : Math.min(5, barInner * 0.22);
       // Bar geometry (signedH: negative = bar grows UP, positive = grows DOWN from baseline)
       const bars = items.map((it, i) => {
         const x = padding.left + i * barW + (barW - barInner) / 2;
@@ -4896,14 +5236,40 @@
       root.appendChild(row3);
       renderTradeCalendar(trades, root);
       renderDashboardCalendar(trades, root, acc.startingBalance || 0);
+
+      // === Row 4: Daily P&L + Equity Curve + Daily Volume + Cumulative P&L (2x2) ===
+      const row4 = el("div", { class: "grid grid-2", style: "margin-bottom:18px" });
+      const dailyPnlCard = makeChartCard("Daily P&L", "bar");
+      const equityCard = makeChartCard("Equity Curve", "area");
+      const dailyVolCard = makeChartCard("Daily Volume", "bar");
+      const cumPnlCard = makeChartCard("Cumulative P&L", "area");
+      row4.appendChild(dailyPnlCard.card); row4.appendChild(equityCard.card);
+      row4.appendChild(dailyVolCard.card); row4.appendChild(cumPnlCard.card);
+      root.appendChild(row4);
+
+      // === Row 5: Drawdown + Rolling Win Rate + P&L by Hour + Win/Loss Streaks (2x2) ===
+      const row5 = el("div", { class: "grid grid-2", style: "margin-bottom:18px" });
+      const ddCurveCard = makeChartCard("Drawdown", "area");
+      const winRateCard = makeChartCard("Rolling Win Rate (20)", "area");
+      const hourCard = makeChartCard("P&L by Hour", "bar");
+      const streakCard = makeChartCard("Win/Loss Streak", "bar");
+      row5.appendChild(ddCurveCard.card); row5.appendChild(winRateCard.card);
+      row5.appendChild(hourCard.card); row5.appendChild(streakCard.card);
+      root.appendChild(row5);
+
       const balanceCanvas = balanceCard.canvas, monthCanvas = monthCard.canvas,
-        wlCanvas = winLossCard.canvas, symCanvas = symCard.canvas, wdCanvas = wdCard.canvas;
+        wlCanvas = winLossCard.canvas, symCanvas = symCard.canvas, wdCanvas = wdCard.canvas,
+        dailyPnlCanvas = dailyPnlCard.canvas, equityCanvas = equityCard.canvas,
+        dailyVolCanvas = dailyVolCard.canvas, cumPnlCanvas = cumPnlCard.canvas,
+        ddCurveCanvas = ddCurveCard.canvas, winRateCanvas = winRateCard.canvas,
+        hourCanvas = hourCard.canvas, streakCanvas = streakCard.canvas;
 
       requestAnimationFrame(() => {
         // Balance curve
+        var _balColor = m.netProfit >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
         drawLineChart(balanceCanvas, [{
           data: m.balanceCurve.map(p => ({ x: p.time, y: p.balance })),
-          color: cssVar("--accent", "#4f8ef7"),
+          color: _balColor,
           fill: true,
           label: t("chart.balance"),
         }], {
@@ -4918,7 +5284,7 @@
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         }).sort((a, b) => a.key.localeCompare(b.key));
         drawBarChart(monthCanvas, monthBuckets.map(b => ({ label: fmtAxisMonth(b.key), value: b.sum })),
-          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
 
         // Win/Loss donut
         const winColor = cssVar("--green", "#22c55e");
@@ -4951,7 +5317,125 @@
           const sum = list.reduce((s, x) => s + x.netProfit, 0);
           return { label: t("weekday." + i).slice(0, 3), value: sum, tipExtra: `${list.length} ${t("nav.trades").toLowerCase()}` };
         });
-        drawBarChart(wdCanvas, weekday, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+        drawBarChart(wdCanvas, weekday, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+
+        // --- Row 4 Charts ---
+        // Daily P&L bars
+        var dailyBuckets = bucketBy(trades, function(x) {
+          var d = new Date(x.closeTime);
+          return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        }).sort(function(a, b) { return a.key.localeCompare(b.key); });
+        drawBarChart(dailyPnlCanvas, dailyBuckets.map(function(b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades" }; }),
+          { yFormat: function(y) { return fmtMoney(y, 0); }, tipFormat: function(v) { return fmtMoney(v, 2, true); }, macd: true });
+
+        // Equity curve (cumulative P&L)
+        var sortedTrades = [...trades].sort(function(a, b) { return a.closeTime - b.closeTime; });
+        var eqPts = [{ x: sortedTrades[0].openTime, y: 0 }];
+        var eqRun = 0;
+        for (var ei = 0; ei < sortedTrades.length; ei++) {
+          eqRun += sortedTrades[ei].netProfit;
+          eqPts.push({ x: sortedTrades[ei].closeTime, y: eqRun });
+        }
+        var eqCol = eqRun >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
+        drawLineChart(equityCanvas, [{
+          data: eqPts,
+          color: eqCol,
+          fill: true,
+          label: "Equity",
+        }], {
+          xFormat: function(x) { return fmtAxisDate(x); },
+          yFormat: function(y) { return fmtMoney(y, 0); },
+        });
+
+        // Daily Volume bars
+        drawBarChart(dailyVolCanvas, dailyBuckets.map(function(b) {
+          var vol = b.trades.reduce(function(s, x) { return s + x.volume; }, 0);
+          return { label: b.key.slice(5), value: vol, tipExtra: b.total + " trades" };
+        }), { yFormat: function(y) { return fmtNum(y, 1); }, color: cssVar("--accent", "#4f8ef7") });
+
+        // Cumulative P&L per trade (line)
+        var sortedTrades = [...trades].sort(function(a, b) { return a.closeTime - b.closeTime; });
+        var cumPts = [{ x: sortedTrades[0].openTime, y: 0 }];
+        var cumPnl = 0;
+        for (var ci = 0; ci < sortedTrades.length; ci++) {
+          cumPnl += sortedTrades[ci].netProfit;
+          cumPts.push({ x: sortedTrades[ci].closeTime, y: cumPnl });
+        }
+        var cumCol = cumPnl >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
+        drawLineChart(cumPnlCanvas, [{
+          data: cumPts,
+          color: cumCol,
+          fill: true,
+          label: "Cumulative P&L",
+        }], {
+          xFormat: function(x) { return fmtAxisDate(x); },
+          yFormat: function(y) { return fmtMoney(y, 0); },
+        });
+
+        // --- Row 5 Charts ---
+        // Drawdown (line)
+        var ddPts = m.balanceCurve.map(function(p) { return { x: p.time, y: p.dd }; });
+        drawLineChart(ddCurveCanvas, [{
+          data: ddPts,
+          color: cssVar("--red", "#e74c3c"),
+          fill: true,
+          label: "Drawdown",
+        }], {
+          xFormat: function(x) { return fmtAxisDate(x); },
+          yFormat: function(y) { return fmtMoney(y, 0); },
+        });
+
+        // Rolling win rate (20-trade window as line)
+        var wrSorted = [...trades].sort(function(a, b) { return a.closeTime - b.closeTime; });
+        var ws = Math.min(20, wrSorted.length);
+        var wrPts = [];
+        for (var ri = 0; ri <= wrSorted.length - ws; ri++) {
+          var slice = wrSorted.slice(ri, ri + ws);
+          var wins = slice.filter(function(t) { return t.netProfit > 0; }).length;
+          wrPts.push({ x: slice[slice.length - 1].closeTime, y: wins / ws });
+        }
+        if (wrPts.length > 0) {
+          drawLineChart(winRateCanvas, [{
+            data: wrPts,
+            color: cssVar("--accent2", "#7c5af7"),
+            fill: true,
+            label: "Win Rate",
+            tipFormat: function(y) { return fmtPct(y, 1); },
+          }], {
+            xFormat: function(x) { return fmtAxisDate(x); },
+            yFormat: function(y) { return fmtPct(y, 0); },
+            referenceLines: [{ value: 0.5, label: "50%" }],
+          });
+        }
+
+        // P&L by hour of day
+        var hourBuckets = {};
+        for (var hi = 0; hi < sortedTrades.length; hi++) {
+          var h = new Date(sortedTrades[hi].closeTime).getHours();
+          if (!hourBuckets[h]) hourBuckets[h] = { sum: 0, count: 0 };
+          hourBuckets[h].sum += sortedTrades[hi].netProfit;
+          hourBuckets[h].count++;
+        }
+        var hourItems = [];
+        for (var hk = 0; hk < 24; hk++) {
+          var b = hourBuckets[hk];
+          hourItems.push({ label: String(hk).padStart(2, "0") + ":00", value: b ? b.sum : 0,
+            tipExtra: b ? b.count + " trades" : "0 trades" });
+        }
+        drawBarChart(hourCanvas, hourItems, { yFormat: function(y) { return fmtMoney(y, 0); }, tipFormat: function(v) { return fmtMoney(v, 2, true); }, macd: true });
+
+        // Win/Loss streak bars
+        var seq = m.tradeSequence || [];
+        if (seq.length > 0) {
+          var streakItems = seq.map(function(s, si) { return {
+            label: "#" + (si + 1),
+            value: s.isWin ? s.netProfit : -Math.abs(s.netProfit),
+            tipExtra: s.isWin ? "Win" : "Loss",
+          }; });
+          // Show last 100 to keep it readable
+          if (streakItems.length > 100) streakItems = streakItems.slice(-100);
+          drawBarChart(streakCanvas, streakItems, { yFormat: function(y) { return fmtMoney(y, 0); }, tipFormat: function(v) { return fmtMoney(v, 2, true); }, macd: true });
+        }
       });
     }
 
@@ -5658,6 +6142,7 @@
               var pct = (pnl / startingBalance) * 100;
               cell.appendChild(el("div", { class: "day-pct", text: (pct > 0 ? "+" : "") + fmtNum(pct, 2) + "%" }));
             }
+            cell.appendChild(el("div", { class: "day-trades", text: entry.count + " trades" }));
             cell.dataset.pnl = pnl;
             cell.dataset.count = entry.count;
             cell.dataset.datekey = dateKey;
@@ -6111,9 +6596,10 @@ function renderTradeCalendar(trades, root) {
           const lonelyBalance = perfShow.balance && !perfShow.drawdown;
           const lonelyDrawdown = perfShow.drawdown && !perfShow.balance;
           if (perfShow.balance) {
+            var _balCol = m.netProfit >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
             series.push({
               data: m.balanceCurve.map(p => ({ x: p.time, y: p.balance })),
-              color: cssVar("--accent", "#4f8ef7"),
+              color: _balCol,
               fill: lonelyBalance,
               label: t("chart.balance"),
             });
@@ -6164,6 +6650,26 @@ function renderTradeCalendar(trades, root) {
           });
         }
 
+        // === New: Daily/Metrics charts row (2x2) ===
+        const analRow1 = el("div", { class: "grid grid-2", style: "margin-bottom:16px" });
+        const analDailyPnlCard = makeChartCard("Daily P&L", "bar");
+        const analEquityCard = makeChartCard("Equity Curve", "area");
+        const analDailyVolCard = makeChartCard("Daily Volume", "bar");
+        const analCumPnlCard = makeChartCard("Cumulative P&L", "area");
+        analRow1.appendChild(analDailyPnlCard.card); analRow1.appendChild(analEquityCard.card);
+        analRow1.appendChild(analDailyVolCard.card); analRow1.appendChild(analCumPnlCard.card);
+        content.appendChild(analRow1);
+
+        // === New: Analysis metrics row 2 (2x2) ===
+        const analRow2 = el("div", { class: "grid grid-2", style: "margin-bottom:16px" });
+        const analDDCurveCard = makeChartCard("Drawdown", "area");
+        const analWinRateCard = makeChartCard("Rolling Win Rate (20)", "area");
+        const analHourCard = makeChartCard("P&L by Hour", "bar");
+        const analStreakCard = makeChartCard("Win/Loss Streak", "bar");
+        analRow2.appendChild(analDDCurveCard.card); analRow2.appendChild(analWinRateCard.card);
+        analRow2.appendChild(analHourCard.card); analRow2.appendChild(analStreakCard.card);
+        content.appendChild(analRow2);
+
         // Row: Trade sequence chart (win/loss streambars)
         if (m.tradeSequence && m.tradeSequence.length >= 2) {
           const seqCard = makeChartCard("Trade Sequence", "bar");
@@ -6213,6 +6719,7 @@ function renderTradeCalendar(trades, root) {
         content.appendChild(allKpiCard);
 
         requestAnimationFrame(() => {
+          try {
           drawPerf();
           drawHistogram(distCard.canvas, m.returns, { bins: 30, binFormat: v => fmtMoney(v, 0) });
           const weekdayBuckets = [1, 2, 3, 4, 5, 6, 0].map(i => {
@@ -6220,13 +6727,129 @@ function renderTradeCalendar(trades, root) {
             const sum = list.reduce((s, x) => s + x.netProfit, 0);
             return { label: t("weekday." + i).slice(0, 3), value: sum, tipExtra: `${list.length} ${t("nav.trades").toLowerCase()}` };
           });
-          drawBarChart(wdCard.canvas, weekdayBuckets, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+          drawBarChart(wdCard.canvas, weekdayBuckets, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
           const symBuckets = bucketBy(filtered, x => x.symbol).sort((a, b) => b.sum - a.sum).slice(0, 25);
           drawBarChart(symCard.canvas, symBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}` })),
-            { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+            { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
           const strBuckets = bucketBy(filtered, x => strategyName(x.strategyId)).sort((a, b) => b.sum - a.sum);
           drawBarChart(strCard.canvas, strBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}` })),
-            { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+            { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+
+        // --- New charts ---
+        // Daily P&L bars
+        var analDailyBuckets = bucketBy(filtered, function(x) {
+          var d = new Date(x.closeTime);
+          return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        }).sort(function(a, b) { return a.key.localeCompare(b.key); });
+        drawBarChart(analDailyPnlCard.canvas, analDailyBuckets.map(function(b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades" }; }),
+          { yFormat: function(y) { return fmtMoney(y, 0); }, tipFormat: function(v) { return fmtMoney(v, 2, true); }, macd: true });
+
+        // Equity curve (cumulative P&L)
+        var analSorted = [...filtered].sort(function(a, b) { return a.closeTime - b.closeTime; });
+        var analEqPts = [{ x: analSorted[0].openTime, y: 0 }];
+        var analEqRun = 0;
+        for (var ei = 0; ei < analSorted.length; ei++) {
+          analEqRun += analSorted[ei].netProfit;
+          analEqPts.push({ x: analSorted[ei].closeTime, y: analEqRun });
+        }
+        var analEqCol = analEqRun >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
+        drawLineChart(analEquityCard.canvas, [{
+          data: analEqPts,
+          color: analEqCol,
+          fill: true,
+          label: "Equity",
+        }], {
+          xFormat: function(x) { return fmtAxisDate(x); },
+          yFormat: function(y) { return fmtMoney(y, 0); },
+        });
+
+        // Daily Volume bars
+        drawBarChart(analDailyVolCard.canvas, analDailyBuckets.map(function(b) {
+          var vol = b.trades.reduce(function(s, x) { return s + x.volume; }, 0);
+          return { label: b.key.slice(5), value: vol, tipExtra: b.total + " trades" };
+        }), { yFormat: function(y) { return fmtNum(y, 1); }, color: cssVar("--accent", "#4f8ef7") });
+
+        // Cumulative P&L per trade (line)
+        var analCumPts = [{ x: analSorted[0].openTime, y: 0 }];
+        var analCum = 0;
+        for (var ci = 0; ci < analSorted.length; ci++) {
+          analCum += analSorted[ci].netProfit;
+          analCumPts.push({ x: analSorted[ci].closeTime, y: analCum });
+        }
+        var analCumCol = analCum >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
+        drawLineChart(analCumPnlCard.canvas, [{
+          data: analCumPts,
+          color: analCumCol,
+          fill: true,
+          label: "Cumulative P&L",
+        }], {
+          xFormat: function(x) { return fmtAxisDate(x); },
+          yFormat: function(y) { return fmtMoney(y, 0); },
+        });
+
+        // Drawdown (line)
+        var analDDPts = m.balanceCurve.map(function(p) { return { x: p.time, y: p.dd }; });
+        drawLineChart(analDDCurveCard.canvas, [{
+          data: analDDPts,
+          color: cssVar("--red", "#e74c3c"),
+          fill: true,
+          label: "Drawdown",
+        }], {
+          xFormat: function(x) { return fmtAxisDate(x); },
+          yFormat: function(y) { return fmtMoney(y, 0); },
+        });
+
+        // Rolling win rate (20-trade window as line)
+        var analWRSorted = [...filtered].sort(function(a, b) { return a.closeTime - b.closeTime; });
+        var analWS = Math.min(20, analWRSorted.length);
+        var analWRPts = [];
+        for (var ri = 0; ri <= analWRSorted.length - analWS; ri++) {
+          var slice = analWRSorted.slice(ri, ri + analWS);
+          var wins = slice.filter(function(t) { return t.netProfit > 0; }).length;
+          analWRPts.push({ x: slice[slice.length - 1].closeTime, y: wins / analWS });
+        }
+        if (analWRPts.length > 0) {
+          drawLineChart(analWinRateCard.canvas, [{
+            data: analWRPts,
+            color: cssVar("--accent2", "#7c5af7"),
+            fill: true,
+            label: "Win Rate",
+            tipFormat: function(y) { return fmtPct(y, 1); },
+          }], {
+            xFormat: function(x) { return fmtAxisDate(x); },
+            yFormat: function(y) { return fmtPct(y, 0); },
+            referenceLines: [{ value: 0.5, label: "50%" }],
+          });
+        }
+
+        // P&L by hour
+        var analHourBuckets = {};
+        for (var hi = 0; hi < analSorted.length; hi++) {
+          var h = new Date(analSorted[hi].closeTime).getHours();
+          if (!analHourBuckets[h]) analHourBuckets[h] = { sum: 0, count: 0 };
+          analHourBuckets[h].sum += analSorted[hi].netProfit;
+          analHourBuckets[h].count++;
+        }
+        var analHourItems = [];
+        for (var hk = 0; hk < 24; hk++) {
+          var b = analHourBuckets[hk];
+          analHourItems.push({ label: String(hk).padStart(2, "0") + ":00", value: b ? b.sum : 0,
+            tipExtra: b ? b.count + " trades" : "0 trades" });
+        }
+        drawBarChart(analHourCard.canvas, analHourItems, { yFormat: function(y) { return fmtMoney(y, 0); }, tipFormat: function(v) { return fmtMoney(v, 2, true); }, macd: true });
+
+        // Win/Loss streak bars
+        var analSeq = m.tradeSequence || [];
+        if (analSeq.length > 0) {
+          var analStreakItems = analSeq.map(function(s, si) { return {
+            label: "#" + (si + 1),
+            value: s.isWin ? s.netProfit : -Math.abs(s.netProfit),
+            tipExtra: s.isWin ? "Win" : "Loss",
+          }; });
+          if (analStreakItems.length > 100) analStreakItems = analStreakItems.slice(-100);
+          drawBarChart(analStreakCard.canvas, analStreakItems, { yFormat: function(y) { return fmtMoney(y, 0); }, tipFormat: function(v) { return fmtMoney(v, 2, true); }, macd: true });
+        }
+          } catch (e) { console.error("Analysis chart error:", e); }
         });
       }
       redraw();
@@ -6635,6 +7258,57 @@ function renderTradeCalendar(trades, root) {
         textCard.appendChild(el("div", { class: "report-text", html: textSummary(r) }));
         content.appendChild(textCard);
 
+        // Trade history table (MT5-style)
+        if (r.trades && r.trades.length > 0) {
+          const thCard = el("div", { class: "card" });
+          thCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("report.tradeHistory") })]));
+          const wrap = el("div", { class: "table-wrap", style: "overflow-x:auto" });
+          const tbl = el("table", { style: "width:100%;font-size:12px;border-collapse:collapse" });
+          const cols = [
+            { l: t("trade.openTime"), a: "left" }, { l: t("trade.ticket"), a: "left" },
+            { l: t("trade.symbol"), a: "left" }, { l: t("trade.direction"), a: "left" },
+            { l: t("trade.volume"), a: "right" }, { l: t("trade.openPrice"), a: "right" },
+            { l: t("trade.sl"), a: "right" }, { l: t("trade.tp"), a: "right" },
+            { l: t("trade.closePrice"), a: "right" }, { l: t("trade.closeTime"), a: "left" },
+            { l: t("trade.commission"), a: "right" }, { l: t("trade.swap"), a: "right" },
+            { l: t("trade.netProfit"), a: "right" },
+          ];
+          const hdr = el("tr");
+          cols.forEach(c => hdr.appendChild(el("th", { style: "padding:6px 8px;text-align:" + c.a + ";background:var(--bg3);white-space:nowrap;font-weight:600", text: c.l })));
+          tbl.appendChild(el("thead", {}, [hdr]));
+          const bdy = el("tbody");
+          r.trades.forEach((tr, i) => {
+            const bg = i % 2 === 0 ? "var(--bg1)" : "var(--bg2)";
+            const row = el("tr", { style: "background:" + bg });
+            const vals = [
+              { v: fmtDate(tr.openTime), a: "left", n: true },
+              { v: tr.ticket, a: "left" },
+              { v: tr.symbol, a: "left" },
+              { v: tr.direction === "Long" ? t("trade.long") : t("trade.short"), a: "left", c: "badge " + (tr.direction === "Long" ? "badge-long" : "badge-short") },
+              { v: fmtNum(tr.volume, 2), a: "right" },
+              { v: tr.openPrice != null ? fmtNum(tr.openPrice) : "—", a: "right" },
+              { v: tr.sl != null ? fmtNum(tr.sl) : "—", a: "right" },
+              { v: tr.tp != null ? fmtNum(tr.tp) : "—", a: "right" },
+              { v: tr.closePrice != null ? fmtNum(tr.closePrice) : "—", a: "right" },
+              { v: fmtDate(tr.closeTime), a: "left", n: true },
+              { v: tr.commission != null ? fmtMoney(tr.commission, 2, true) : "—", a: "right" },
+              { v: tr.swap != null ? fmtMoney(tr.swap, 2, true) : "—", a: "right" },
+              { v: fmtMoney(tr.netProfit, 2, true), a: "right", c: tr.netProfit >= 0 ? "pos" : "neg" },
+            ];
+            vals.forEach(v => {
+              var s = "padding:5px 8px;text-align:" + v.a + ";border-bottom:1px solid var(--border)" + (v.n ? ";white-space:nowrap" : "");
+              var td = el("td", { style: s, class: v.c });
+              td.textContent = String(v.v);
+              row.appendChild(td);
+            });
+            bdy.appendChild(row);
+          });
+          tbl.appendChild(bdy);
+          wrap.appendChild(tbl);
+          thCard.appendChild(wrap);
+          content.appendChild(thCard);
+        }
+
         requestAnimationFrame(() => {
           const sb = r.metrics.startingBalance || 0;
           drawLineChart(balanceCard.canvas, [{
@@ -6658,12 +7332,12 @@ function renderTradeCalendar(trades, root) {
             const list = r.trades.filter(t => new Date(t.closeTime).getDay() === i);
             return { label: t("weekday." + i).slice(0, 3), value: list.reduce((s, x) => s + x.netProfit, 0) };
           });
-          drawBarChart(wdCard.canvas, wd, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+          drawBarChart(wdCard.canvas, wd, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
           const months = bucketBy(r.trades, x => {
             const d = new Date(x.closeTime);
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
           }).sort((a, b) => a.key.localeCompare(b.key));
-          drawBarChart(monthCard.canvas, months.map(b => ({ label: fmtAxisMonth(b.key), value: b.sum })), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true) });
+          drawBarChart(monthCard.canvas, months.map(b => ({ label: fmtAxisMonth(b.key), value: b.sum })), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
         });
       }
     }
@@ -6846,6 +7520,7 @@ function renderCalendar() {
             var pct = (pnl / startingBalance) * 100;
             cell.appendChild(el("div", { class: "day-pct", text: (pct > 0 ? "+" : "") + fmtNum(pct, 2) + "%" }));
           }
+          cell.appendChild(el("div", { class: "day-trades", text: entry.count + " trades" }));
           cell.dataset.pnl = pnl;
           cell.dataset.count = entry.count;
           cell.dataset.datekey = dateKey;
@@ -7016,6 +7691,29 @@ function renderCalendar() {
           await setMeta("activeAccountId", null);
           toast(t("toast.dataDeleted"), "", "success");
           renderAccountSelect();
+          renderActiveTab();
+        }
+      }));
+      dangerCard.appendChild(el("div", { style: "height:10px" }));
+      dangerCard.appendChild(el("button", {
+        class: "btn btn-danger", text: t("settings.deleteAccountData"), onClick: async () => {
+          var acc = currentAccount();
+          if (!acc) { toast(t("import.title"), t("import.noAccount"), "error"); return; }
+          if (!await confirmModal(t("settings.deleteAccountData"), t("settings.deleteAccountDataConfirm"))) return;
+          // Delete trades for this account
+          var tradesToDel = state.trades.filter(function(t) { return t.accountId === acc.id; });
+          for (var ti = 0; ti < tradesToDel.length; ti++) await dbDel("trades", [acc.id, tradesToDel[ti].ticket]);
+          // Delete strategies for this account
+          var stratsToDel = state.strategies.filter(function(s) { return s.accountId === acc.id; });
+          for (var si = 0; si < stratsToDel.length; si++) await dbDel("strategies", stratsToDel[si].id);
+          // Delete logs for this account
+          var allLogs = await dbGetAll("logs");
+          for (var li = 0; li < allLogs.length; li++) if (allLogs[li].accountId === acc.id) await dbDel("logs", allLogs[li].id);
+          // Update state
+          state.trades = state.trades.filter(function(t) { return t.accountId !== acc.id; });
+          state.strategies = state.strategies.filter(function(s) { return s.accountId !== acc.id; });
+          state.logs = state.logs.filter(function(l) { return l.accountId !== acc.id; });
+          toast(t("toast.accountDataDeleted") || ("Deleted data for " + acc.name), "", "success");
           renderActiveTab();
         }
       }));
