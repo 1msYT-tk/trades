@@ -1635,6 +1635,63 @@
       border-bottom: 1px solid var(--border);
     }
 
+    /* Chart drilldown modal */
+    .drilldown-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .drilldown-stat {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .drilldown-stat-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      font-weight: 600;
+    }
+    .drilldown-stat-value {
+      font-size: 16px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .drilldown-stat-value.pos { color: var(--green); }
+    .drilldown-stat-value.neg { color: var(--red); }
+    .drilldown-trades-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+    .drilldown-trade-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      border-radius: var(--r);
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+    .drilldown-trade-row:last-child { border-bottom: none; }
+    .drilldown-trade-row:hover { background: var(--bg3); }
+    .drilldown-trade-sym { font-weight: 700; min-width: 60px; }
+    .drilldown-trade-dir { color: var(--text-muted); min-width: 40px; }
+    .drilldown-trade-date { color: var(--text-muted); flex: 1; font-size: 11px; }
+    .drilldown-trade-pnl { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .chart-clickable { cursor: pointer; }
+    .modal-wide { max-width: 700px !important; }
+
     .metric-row {
       display: flex;
       justify-content: space-between;
@@ -2153,7 +2210,6 @@
       border-radius: var(--cr);
       padding: 18px 20px
     }
-    }
 
     /* Zella Dashboard Layout */
     .zella-dash-grid {
@@ -2214,6 +2270,128 @@
     }
     @media (max-width: 600px) {
       .zella-kpi-row { grid-template-columns: 1fr; }
+    }
+    /* Mobile Optimization */
+    @media (max-width: 600px) {
+      .app { flex-direction: column; }
+      .sidebar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 60px;
+        flex-direction: row;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        z-index: 100;
+        background: var(--bg2);
+      }
+      .sidebar .nav {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        padding: 0;
+        align-items: center;
+        justify-content: space-around;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .sidebar .ni {
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 6px;
+        font-size: 10px;
+        flex: 1;
+        justify-content: center;
+        text-align: center;
+        min-width: 60px;
+      }
+      .sidebar .nav-label {
+        display: block;
+        font-size: 9px;
+      }
+      .sidebar .ni::before {
+        display: none;
+      }
+      .sidebar .ni.active {
+        color: var(--accent);
+        background: transparent;
+      }
+      .sidebar .ni.active .nav-icon {
+        color: var(--accent);
+      }
+      
+      .main {
+        padding-bottom: 60px;
+      }
+      
+      .ph {
+        padding: 12px 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .ha {
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+      }
+      .ha .btn {
+        white-space: nowrap;
+      }
+      
+      .page-body {
+        padding: 16px 12px;
+      }
+      .card {
+        padding: 14px;
+      }
+      
+      .table-wrap {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      .filter-bar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 8px;
+      }
+      .filter-bar .form-row {
+        min-width: 120px;
+      }
+      
+      .modal {
+        padding: 20px;
+        width: 95%;
+      }
+      .form-actions {
+        flex-direction: column;
+        gap: 8px;
+      }
+      .form-actions button {
+        width: 100%;
+      }
+      
+      .toast-stack {
+        top: 16px;
+        bottom: auto;
+        right: 16px;
+        left: 16px;
+        max-width: none;
+      }
+      
+      /* Reset Zella Grid on Mobile */
+      .zella-dash-grid {
+        grid-template-columns: 1fr;
+      }
+      .zella-kpi-row {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -2793,10 +2971,78 @@
     function showModal(title, contentNode, options = {}) {
       const box = $("#modalBox");
       box.innerHTML = "";
+      if (options.wide) box.classList.add("modal-wide");
+      else box.classList.remove("modal-wide");
       box.appendChild(el("h3", { text: title }));
       box.appendChild(contentNode);
       $("#modalOverlay").classList.add("active");
       return new Promise(resolve => { box._resolver = resolve; });
+    }
+
+    function showChartDrilldown(title, bucket) {
+      if (!bucket || bucket.total === 0) return;
+      const totalTrades = bucket.total;
+      const wins = bucket.wins || 0;
+      const losses = bucket.losses || 0;
+      const netPnl = bucket.sum || 0;
+      const winRate = totalTrades ? wins / totalTrades : 0;
+      const avgPnl = totalTrades ? netPnl / totalTrades : 0;
+      const sortedTrs = (bucket.trades || []).slice().sort((a, b) => b.netProfit - a.netProfit);
+      const bestTrade = sortedTrs[0];
+      const worstTrade = sortedTrs[sortedTrs.length - 1];
+      const pnlClass = netPnl >= 0 ? "pos" : "neg";
+      const avgClass = avgPnl >= 0 ? "pos" : "neg";
+
+      // --- Stats grid ---
+      const statsGrid = el("div", { class: "drilldown-stats" }, [
+        el("div", { class: "drilldown-stat" }, [
+          el("div", { class: "drilldown-stat-label", text: "Net P&L" }),
+          el("div", { class: "drilldown-stat-value " + pnlClass, text: fmtMoney(netPnl, 2, true) })
+        ]),
+        el("div", { class: "drilldown-stat" }, [
+          el("div", { class: "drilldown-stat-label", text: "Win Rate" }),
+          el("div", { class: "drilldown-stat-value", text: fmtPct(winRate, 1) })
+        ]),
+        el("div", { class: "drilldown-stat" }, [
+          el("div", { class: "drilldown-stat-label", text: "Trades" }),
+          el("div", { class: "drilldown-stat-value", text: totalTrades })
+        ]),
+        el("div", { class: "drilldown-stat" }, [
+          el("div", { class: "drilldown-stat-label", text: "Avg P&L" }),
+          el("div", { class: "drilldown-stat-value " + avgClass, text: fmtMoney(avgPnl, 2, true) })
+        ]),
+        el("div", { class: "drilldown-stat" }, [
+          el("div", { class: "drilldown-stat-label", text: "Wins / Losses" }),
+          el("div", { class: "drilldown-stat-value", text: wins + " / " + losses })
+        ]),
+        el("div", { class: "drilldown-stat" }, [
+          el("div", { class: "drilldown-stat-label", text: "Best Trade" }),
+          el("div", { class: "drilldown-stat-value pos", text: bestTrade ? fmtMoney(bestTrade.netProfit, 2, true) : "—" })
+        ]),
+      ]);
+
+      // --- Trades list ---
+      const recentTrades = (bucket.trades || []).slice().sort((a, b) => b.closeTime - a.closeTime).slice(0, 20);
+      const tradeRows = recentTrades.map(tr => {
+        const pnlColor = tr.netProfit >= 0 ? "var(--green)" : "var(--red)";
+        const closeDate = tr.closeTime ? new Date(tr.closeTime).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+        return el("div", { class: "drilldown-trade-row" }, [
+          el("span", { class: "drilldown-trade-sym", text: tr.symbol }),
+          el("span", { class: "drilldown-trade-dir", text: tr.direction }),
+          el("span", { class: "drilldown-trade-date", text: closeDate }),
+          el("span", { class: "drilldown-trade-pnl", text: fmtMoney(tr.netProfit, 2, true), style: "color:" + pnlColor })
+        ]);
+      });
+
+      const content = el("div", {}, [
+        statsGrid,
+        el("div", { class: "drilldown-trades-title", text: "Recent Trades " + (recentTrades.length < bucket.total ? "(Latest " + recentTrades.length + " of " + bucket.total + ")" : "(" + recentTrades.length + ")") }),
+        el("div", { class: "table-wrap" }, [
+          ...tradeRows
+        ])
+      ]);
+
+      showModal(title, content, { wide: true });
     }
     function closeModal(result = null) {
       $("#modalOverlay").classList.remove("active");
@@ -4610,8 +4856,10 @@
 
       const animMs = resolveAnimMs(opts, 550);
       animateChart(canvas, animMs, (p) => { drawBackground(); drawBars(p); }, () => {
-        // Hover wiring
+        // Hover + click wiring
         const baseImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        if (opts.onBarClick) canvas.classList.add("chart-clickable");
+        else canvas.classList.remove("chart-clickable");
         canvas.onmousemove = e => {
           const rect = canvas.getBoundingClientRect();
           const px = e.clientX - rect.left;
@@ -4626,10 +4874,19 @@
           fillRoundedBar(ctx, b.x, b.baseline, b.w, b.signedH, corner);
           const it = items[idx];
           const valStr = opts.tipFormat ? opts.tipFormat(it.value, it) : (opts.yFormat ? opts.yFormat(it.value) : shortNum(it.value));
+          const clickHint = opts.onBarClick ? `<div style="color:var(--text-muted);font-size:10px;margin-top:4px;opacity:0.7">Click to drill down ↗</div>` : "";
           const extra = it.tipExtra ? `<div style="color:var(--text-muted);font-size:11px;margin-top:2px">${it.tipExtra}</div>` : "";
-          showChartTip(e, `<div style="font-weight:600;margin-bottom:2px">${it.label}</div><div><strong>${valStr}</strong></div>${extra}`);
+          showChartTip(e, `<div style="font-weight:600;margin-bottom:2px">${it.label}</div><div><strong>${valStr}</strong></div>${extra}${clickHint}`);
         };
         canvas.onmouseleave = () => { ctx.putImageData(baseImg, 0, 0); hideChartTip(); };
+        canvas.onclick = e => {
+          if (!opts.onBarClick) return;
+          const rect = canvas.getBoundingClientRect();
+          const px = e.clientX - rect.left;
+          if (px < padding.left || px > padding.left + plotW) return;
+          const idx = Math.floor((px - padding.left) / barW);
+          if (idx >= 0 && idx < items.length) opts.onBarClick(items[idx], idx);
+        };
       });
     }
 
@@ -4736,10 +4993,21 @@
           fillRoundedHBar(ctx, b.baselineX, b.y, b.w, b.h, corner);
           const it = items[idx];
           const valStr = opts.tipFormat ? opts.tipFormat(it.value, it) : valFmt(it.value);
+          const clickHint = opts.onBarClick ? `<div style="color:var(--text-muted);font-size:10px;margin-top:4px;opacity:0.7">Click to drill down ↗</div>` : "";
           const extra = it.tipExtra ? `<div style="color:var(--text-muted);font-size:11px;margin-top:2px">${it.tipExtra}</div>` : "";
-          showChartTip(e, `<div style="font-weight:600;margin-bottom:2px">${it.label}</div><div><strong>${valStr}</strong></div>${extra}`);
+          showChartTip(e, `<div style="font-weight:600;margin-bottom:2px">${it.label}</div><div><strong>${valStr}</strong></div>${extra}${clickHint}`);
         };
         canvas.onmouseleave = () => { ctx.putImageData(baseImg, 0, 0); hideChartTip(); };
+        if (opts.onBarClick) canvas.classList.add("chart-clickable");
+        else canvas.classList.remove("chart-clickable");
+        canvas.onclick = e => {
+          if (!opts.onBarClick) return;
+          const rect = canvas.getBoundingClientRect();
+          const py = e.clientY - rect.top;
+          if (py < padding.top || py > padding.top + plotH) return;
+          const idx = Math.floor((py - padding.top) / barH);
+          if (idx >= 0 && idx < items.length) opts.onBarClick(items[idx], idx);
+        };
       });
     }
 
@@ -5027,6 +5295,7 @@
       ctx.stroke();
 
       // Draw data points
+      const points = [];
       ctx.fillStyle = accent;
       for (let i = 0; i < sides; i++) {
         const theta = i * angleStep - Math.PI / 2;
@@ -5036,7 +5305,57 @@
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fill();
+        points.push({ x, y, item: data[i] });
       }
+
+      const baseImg = ctx.getImageData(0, 0, W, H);
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (W / rect.width);
+        const my = (e.clientY - rect.top) * (H / rect.height);
+        
+        let hovered = null;
+        let minDist = 225; // 15px radius squared hit area
+        for (const p of points) {
+          const dx = mx - p.x;
+          const dy = my - p.y;
+          const dist2 = dx * dx + dy * dy;
+          if (dist2 < minDist) {
+            minDist = dist2;
+            hovered = p;
+          }
+        }
+        
+        if (hovered) {
+          ctx.putImageData(baseImg, 0, 0);
+          ctx.beginPath();
+          ctx.arc(hovered.x, hovered.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = accent;
+          ctx.fill();
+          ctx.strokeStyle = cssVar("--bg", "#1a1d2d");
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          let valHtml = `<div style="color:var(--text-muted);font-size:11px">Score: ${(hovered.item.value * 100).toFixed(0)}/100</div>`;
+          if (hovered.item.raw !== undefined) {
+             valHtml = `<div><strong>${hovered.item.raw}</strong></div>` + valHtml;
+          } else {
+             valHtml = `<div><strong>${(hovered.item.value * 100).toFixed(0)}%</strong></div>`;
+          }
+          
+          showChartTip(e, `<div style="font-weight:600;margin-bottom:2px">${hovered.item.label}</div>${valHtml}`);
+          canvas.style.cursor = "pointer";
+        } else {
+          ctx.putImageData(baseImg, 0, 0);
+          hideChartTip();
+          canvas.style.cursor = "default";
+        }
+      };
+      canvas.onmouseleave = () => {
+        ctx.putImageData(baseImg, 0, 0);
+        hideChartTip();
+        canvas.style.cursor = "default";
+      };
     }
 
     function drawHeatmap(container, matrix, labels, opts = {}) {
@@ -5513,16 +5832,17 @@
 
         requestAnimationFrame(() => {
           const pFactor = Math.min(1, m.profitFactor / 3);
-          const avgWL = Math.min(1, Math.max(0.05, m.avgWin / (m.avgLoss === 0 ? 1 : m.avgLoss)) / 3);
+          const avgWLRatio = m.avgWin / (m.avgLoss === 0 ? 1 : m.avgLoss);
+          const avgWL = Math.min(1, Math.max(0.05, avgWLRatio) / 3);
           const recFactor = Math.min(1, Math.max(0, m.recoveryFactor / 5));
           const ddFactor = Math.min(1, Math.max(0, 1 - m.maxDDPct));
           const consistency = Math.min(1, m.winRate * 1.5);
           drawRadarChart(radarCard.canvas, [
-            { label: "Consistency", value: consistency },
-            { label: "Profit factor", value: pFactor },
-            { label: "Avg win/loss", value: avgWL },
-            { label: "Recovery", value: recFactor },
-            { label: "Max DD", value: ddFactor }
+            { label: "Consistency", value: consistency, raw: fmtPct(m.winRate, 1) + " Win Rate" },
+            { label: "Profit factor", value: pFactor, raw: fmtNum(m.profitFactor, 2) },
+            { label: "Avg win/loss", value: avgWL, raw: fmtNum(avgWLRatio, 2) + ":1 Ratio" },
+            { label: "Recovery", value: recFactor, raw: fmtNum(m.recoveryFactor, 2) },
+            { label: "Max DD", value: ddFactor, raw: fmtPct(m.maxDDPct, 1) }
           ]);
 
           const stSorted = [...trades].sort((a, b) => a.closeTime - b.closeTime);
@@ -5718,6 +6038,16 @@
       pnlByDayCard.card.style.marginBottom = "18px";
       root.appendChild(pnlByDayCard.card);
 
+      // --- Row F: Qualitative & Execution Analytics (New) ---
+      const row6 = el("div", { class: "grid grid-2", style: "margin-bottom:18px" });
+      const setupCard = makeChartCard("P&L by Setup", "bar");
+      const emotionCard = makeChartCard("P&L by Pre-Trade Emotion", "bar");
+      const ruleCard = makeChartCard("P&L by Rule Score", "bar");
+      const sessionCard = makeChartCard("P&L by Session", "bar");
+      row6.appendChild(setupCard.card); row6.appendChild(emotionCard.card);
+      row6.appendChild(ruleCard.card); row6.appendChild(sessionCard.card);
+      root.appendChild(row6);
+
       requestAnimationFrame(() => {
         // Balance curve
         var _balColor = m.netProfit >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
@@ -5735,8 +6065,9 @@
           const d = new Date(x.closeTime);
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         }).sort((a, b) => a.key.localeCompare(b.key));
-        drawBarChart(monthCard.canvas, monthBuckets.map(b => ({ label: fmtAxisMonth(b.key), value: b.sum })),
-          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+        drawBarChart(monthCard.canvas, monthBuckets.map((b, i) => ({ label: fmtAxisMonth(b.key), value: b.sum, _bucket: monthBuckets[i] })),
+          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+            onBarClick: (it) => showChartDrilldown("Month: " + it.label, it._bucket) });
 
         // Win/Loss donut
         drawDonut(winLossCard.canvas, [
@@ -5751,24 +6082,29 @@
           const bot = symBuckets.slice(-5).filter(b => !top.includes(b));
           symItems = top.concat(bot.sort((a, b) => b.sum - a.sum));
         } else { symItems = symBuckets; }
-        drawHBarChart(symCard.canvas, symItems.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}` })),
-          { xFormat: x => fmtMoney(x, 0), tipFormat: v => fmtMoney(v, 2, true) });
+        drawHBarChart(symCard.canvas, symItems.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}`, _bucket: b })),
+          { xFormat: x => fmtMoney(x, 0), tipFormat: v => fmtMoney(v, 2, true),
+            onBarClick: (it) => showChartDrilldown("Symbol: " + it.label, it._bucket) });
 
         // Weekday bar chart
-        const weekday = [1, 2, 3, 4, 5, 6, 0].map(i => {
+        const weekdayBuckets = [1, 2, 3, 4, 5, 6, 0].map(i => {
           const list = trades.filter(tr => new Date(tr.closeTime).getDay() === i);
           const sum = list.reduce((s, x) => s + x.netProfit, 0);
-          return { label: t("weekday." + i).slice(0, 3), value: sum, tipExtra: `${list.length} ${t("nav.trades").toLowerCase()}` };
+          const wins = list.filter(x => x.netProfit > 0).length;
+          const losses = list.filter(x => x.netProfit < 0).length;
+          return { label: t("weekday." + i).slice(0, 3), value: sum, _bucket: { key: t("weekday." + i), total: list.length, sum, wins, losses, trades: list }, tipExtra: `${list.length} ${t("nav.trades").toLowerCase()}` };
         });
-        drawBarChart(wdCard.canvas, weekday, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+        drawBarChart(wdCard.canvas, weekdayBuckets, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+          onBarClick: (it) => showChartDrilldown("Weekday: " + it._bucket.key, it._bucket) });
 
         // Daily P&L
         var dailyBuckets = bucketBy(trades, function (x) {
           var d = new Date(x.closeTime);
           return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
         }).sort(function (a, b) { return a.key.localeCompare(b.key); });
-        drawBarChart(dailyPnlCard.canvas, dailyBuckets.map(function (b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades" }; }),
-          { yFormat: function (y) { return fmtMoney(y, 0); }, tipFormat: function (v) { return fmtMoney(v, 2, true); }, macd: true });
+        drawBarChart(dailyPnlCard.canvas, dailyBuckets.map(function (b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades", _bucket: b }; }),
+          { yFormat: function (y) { return fmtMoney(y, 0); }, tipFormat: function (v) { return fmtMoney(v, 2, true); }, macd: true,
+            onBarClick: function(it) { showChartDrilldown("Day: " + it.label, it._bucket); } });
 
         // Equity curve 2
         var sortedTrades2 = [...trades].sort(function (a, b) { return a.closeTime - b.closeTime; });
@@ -5783,8 +6119,9 @@
         // Daily Volume
         drawBarChart(dailyVolCard.canvas, dailyBuckets.map(function (b) {
           var vol = b.trades.reduce(function (s, x) { return s + x.volume; }, 0);
-          return { label: b.key.slice(5), value: vol, tipExtra: b.total + " trades" };
-        }), { yFormat: function (y) { return fmtNum(y, 1); }, color: cssVar("--accent", "#4f8ef7") });
+          return { label: b.key.slice(5), value: vol, tipExtra: b.total + " trades", _bucket: b };
+        }), { yFormat: function (y) { return fmtNum(y, 1); }, color: cssVar("--accent", "#4f8ef7"),
+          onBarClick: function(it) { showChartDrilldown("Volume Day: " + it.label, it._bucket); } });
 
         // Cumulative P&L
         var cumPts = [{ x: sortedTrades2[0].openTime, y: 0 }]; var cumPnl = 0;
@@ -5824,9 +6161,14 @@
         var hourItems = [];
         for (var hk = 0; hk < 24; hk++) {
           var hb = hourBuckets[hk];
-          hourItems.push({ label: String(hk).padStart(2, "0") + ":00", value: hb ? hb.sum : 0, tipExtra: hb ? hb.count + " trades" : "0 trades" });
+          const _hTrades = hb ? sortedTrades2.filter(t => new Date(t.closeTime).getHours() === hk) : [];
+          const _hWins = _hTrades.filter(t => t.netProfit > 0).length;
+          const _hLosses = _hTrades.filter(t => t.netProfit < 0).length;
+          hourItems.push({ label: String(hk).padStart(2, "0") + ":00", value: hb ? hb.sum : 0, tipExtra: hb ? hb.count + " trades" : "0 trades",
+            _bucket: { key: String(hk).padStart(2, "0") + ":00", total: _hTrades.length, sum: hb ? hb.sum : 0, wins: _hWins, losses: _hLosses, trades: _hTrades } });
         }
-        drawBarChart(hourCard.canvas, hourItems, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+        drawBarChart(hourCard.canvas, hourItems, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+          onBarClick: (it) => { if (it._bucket.total > 0) showChartDrilldown("Hour: " + it.label, it._bucket); } });
 
         // Win/Loss Streak
         var seq = m.tradeSequence || [];
@@ -5844,12 +6186,168 @@
           return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
         }).sort(function (a, b) { return a.key.localeCompare(b.key); });
         drawBarChart(pnlByDayCard.canvas, pnlByDayBuckets.map(function (b) {
-          return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades  ·  " + (b.sum >= 0 ? "+" : "") + fmtMoney(b.sum, 2, true) };
-        }), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+          return { label: b.key.slice(5), value: b.sum, _bucket: b, tipExtra: b.total + " trades  ·  " + (b.sum >= 0 ? "+" : "") + fmtMoney(b.sum, 2, true) };
+        }), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+          onBarClick: function(it) { showChartDrilldown("Day: " + it._bucket.key, it._bucket); } });
+
+        // Qualitative & Execution Charts
+        const setupBuckets = bucketBy(trades, x => x.setup || "Unassigned").sort((a, b) => b.sum - a.sum);
+        drawBarChart(setupCard.canvas, setupBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+            onBarClick: (it) => showChartDrilldown("Setup: " + it.label, it._bucket) });
+
+        const emotionBuckets = bucketBy(trades, x => x.emotionPre || "Unassigned").sort((a, b) => b.sum - a.sum);
+        drawBarChart(emotionCard.canvas, emotionBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+            onBarClick: (it) => showChartDrilldown("Emotion: " + it.label, it._bucket) });
+
+        const ruleBuckets = bucketBy(trades, x => x.ruleScore ? x.ruleScore + " Stars" : "Unassigned").sort((a, b) => a.key.localeCompare(b.key));
+        drawBarChart(ruleCard.canvas, ruleBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+            onBarClick: (it) => showChartDrilldown("Rule Score: " + it.label, it._bucket) });
+
+        const sessionBuckets = bucketBy(trades, x => x.session || "Unassigned").sort((a, b) => b.sum - a.sum);
+        drawBarChart(sessionCard.canvas, sessionBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+          { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+            onBarClick: (it) => showChartDrilldown("Session: " + it.label, it._bucket) });
       });
     }
 
     // === Render trades table (shared) ===
+    async function saveTradeDetails(ticket, details) {
+      const idx = state.trades.findIndex(t => t.ticket === ticket && t.accountId === state.activeAccountId);
+      if (idx === -1) return;
+      const tr = state.trades[idx];
+      Object.assign(tr, details);
+      
+      const db = await tryOpenDB();
+      const tx = db.transaction("trades", "readwrite");
+      tx.objectStore("trades").put(tr);
+      
+      tx.oncomplete = () => {
+        toast("Saved", "Trade details updated", "success", 2000);
+        if (state.activeTab === "trades") renderTradesTab(); 
+      };
+    }
+
+    function openTradeModal(ticket) {
+      const tr = state.trades.find(t => t.ticket === ticket && t.accountId === state.activeAccountId);
+      if (!tr) return;
+      
+      const form = el("div", { class: "form-group flex-col gap-16" }, [
+        
+        // --- Qualitative & Psychological ---
+        el("div", { class: "metric-section-title", text: "Qualitative & Psychological" }),
+        el("div", { class: "grid grid-2", style: "gap:16px" }, [
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Setup / Playbook" }),
+            el("input", { type: "text", id: "trade_setup", class: "form-control", value: tr.setup || "", placeholder: "e.g., Breakout" })
+          ]),
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Rule Following Score (1-5)" }),
+            el("input", { type: "number", min: "1", max: "5", id: "trade_ruleScore", class: "form-control", value: tr.ruleScore || "" })
+          ])
+        ]),
+        el("div", { class: "grid grid-2", style: "gap:16px" }, [
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Pre-Trade Emotion" }),
+            el("input", { type: "text", id: "trade_emotionPre", class: "form-control", value: tr.emotionPre || "", placeholder: "e.g., FOMO" })
+          ]),
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Post-Trade Emotion" }),
+            el("input", { type: "text", id: "trade_emotionPost", class: "form-control", value: tr.emotionPost || "", placeholder: "e.g., Relieved" })
+          ])
+        ]),
+
+        // --- Execution Metrics ---
+        el("div", { class: "metric-section-title", text: "Advanced Execution Metrics" }),
+        el("div", { class: "grid grid-2", style: "gap:16px" }, [
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "MAE (Max Adverse Excursion)" }),
+            el("input", { type: "number", step: "any", id: "trade_mae", class: "form-control", value: tr.mae || "", placeholder: "e.g., -50" })
+          ]),
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "MFE (Max Favorable Excursion)" }),
+            el("input", { type: "number", step: "any", id: "trade_mfe", class: "form-control", value: tr.mfe || "", placeholder: "e.g., 150" })
+          ])
+        ]),
+        el("div", { class: "grid grid-2", style: "gap:16px" }, [
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Initial Risk ($)" }),
+            el("input", { type: "number", step: "any", id: "trade_initialRisk", class: "form-control", value: tr.initialRisk || "" })
+          ]),
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Slippage" }),
+            el("input", { type: "number", step: "any", id: "trade_slippage", class: "form-control", value: tr.slippage || "" })
+          ])
+        ]),
+
+        // --- Contextual Market Data ---
+        el("div", { class: "metric-section-title", text: "Contextual Market Data" }),
+        el("div", { class: "grid grid-2", style: "gap:16px" }, [
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "Market Session" }),
+            el("select", { id: "trade_session", class: "form-control" }, [
+              el("option", { value: "", text: "None" }),
+              el("option", { value: "Asia", text: "Asia", selected: tr.session === "Asia" }),
+              el("option", { value: "London", text: "London", selected: tr.session === "London" }),
+              el("option", { value: "New York", text: "New York", selected: tr.session === "New York" })
+            ])
+          ]),
+          el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+            el("label", { text: "High TF Trend" }),
+            el("select", { id: "trade_htfTrend", class: "form-control" }, [
+              el("option", { value: "", text: "None" }),
+              el("option", { value: "Bullish", text: "Bullish", selected: tr.htfTrend === "Bullish" }),
+              el("option", { value: "Bearish", text: "Bearish", selected: tr.htfTrend === "Bearish" }),
+              el("option", { value: "Ranging", text: "Ranging", selected: tr.htfTrend === "Ranging" })
+            ])
+          ])
+        ]),
+        el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+          el("label", { text: "Confluences (comma separated)" }),
+          el("input", { type: "text", id: "trade_confluences", class: "form-control", value: (tr.confluences || []).join(", "), placeholder: "e.g., EMA 200, Support" })
+        ]),
+
+        // --- General ---
+        el("div", { class: "metric-section-title", text: "General Notes & Tags" }),
+        el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+          el("label", { text: "Tags (comma separated)" }),
+          el("input", { type: "text", id: "trade_tags", class: "form-control", value: (tr.tags || []).join(", "), placeholder: "#news, #mistake" })
+        ]),
+        el("div", { class: "form-row flex-col", style: "gap:4px" }, [
+          el("label", { text: "Journal Notes" }),
+          el("textarea", { id: "trade_notes", rows: "4", class: "form-control", text: tr.journalNotes || "", placeholder: "What went well? What could be improved?", style: "width:100%; resize:vertical; padding:8px; border:1px solid var(--border2); border-radius:var(--r); background:var(--bg); color:var(--text)" })
+        ]),
+
+        el("div", { class: "form-actions" }, [
+          el("button", { class: "btn", text: t("common.cancel"), onClick: () => closeModal() }),
+          el("button", { class: "btn btn-primary", text: t("common.save"), onClick: () => {
+            saveTradeDetails(ticket, {
+              setup: $("#trade_setup").value.trim(),
+              emotionPre: $("#trade_emotionPre").value.trim(),
+              emotionPost: $("#trade_emotionPost").value.trim(),
+              ruleScore: parseInt($("#trade_ruleScore").value) || null,
+              tags: $("#trade_tags").value.split(",").map(s => s.trim()).filter(s => s),
+              journalNotes: $("#trade_notes").value.trim(),
+              mae: parseFloat($("#trade_mae").value) || null,
+              mfe: parseFloat($("#trade_mfe").value) || null,
+              initialRisk: parseFloat($("#trade_initialRisk").value) || null,
+              slippage: parseFloat($("#trade_slippage").value) || null,
+              session: $("#trade_session").value,
+              htfTrend: $("#trade_htfTrend").value,
+              confluences: $("#trade_confluences").value.split(",").map(s => s.trim()).filter(s => s)
+            });
+            closeModal();
+          }})
+        ])
+      ]);
+
+      showModal("Trade Details: #" + ticket, form, { wide: true });
+    }
+
+
+
     function renderTradesTable(trades, opts = {}) {
       if (trades.length === 0) {
         return el("div", { class: "empty" }, [
@@ -5858,9 +6356,9 @@
       }
       const cols = opts.compact
         ? ["closeTime", "symbol", "direction", "volume", "netProfit"]
-        : ["ticket", "symbol", "direction", "volume", "openTime", "closeTime", "openPrice", "closePrice", "profit", "commission", "swap", "netProfit", "strategy", "magicNumber", "comment"];
+        : ["ticket", "actions", "symbol", "direction", "volume", "openTime", "closeTime", "openPrice", "closePrice", "profit", "commission", "swap", "netProfit", "strategy", "magicNumber", "comment"];
       const headers = {
-        ticket: t("trade.ticket"), symbol: t("trade.symbol"), direction: t("trade.direction"),
+        ticket: t("trade.ticket"), actions: "", symbol: t("trade.symbol"), direction: t("trade.direction"),
         volume: t("trade.volume"), openTime: t("trade.openTime"), closeTime: t("trade.closeTime"),
         openPrice: t("trade.openPrice"), closePrice: t("trade.closePrice"),
         profit: t("trade.profit"), commission: t("trade.commission"), swap: t("trade.swap"),
@@ -5905,6 +6403,11 @@
             }
             case "volume":
               cell = el("td", { class: "num", text: fmtNum(tr.volume, 2) });
+              break;
+            case "actions":
+              cell = el("td", { class: "row-action" }, [
+                el("button", { class: "icon-btn-sm", title: "Edit Details", onclick: () => openTradeModal(tr.ticket), text: "✎" })
+              ]);
               break;
             case "strategy":
               cell = el("td", { text: strategyName(tr.strategyId), class: tr.strategyId ? "" : "muted" });
@@ -6676,9 +7179,9 @@
         var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
 
         var nav = el("div", { class: "cal-header" });
-        var prevBtn = el("button", { class: "cal-nav-btn", text: "u2190 " + (t("common.back") || "Back"), onClick: function () { state._dbCalMonthIdx--; renderMonth(container, periods[state._dbCalMonthIdx]); } });
+        var prevBtn = el("button", { class: "cal-nav-btn", text: "←", onClick: function () { state._dbCalMonthIdx--; renderMonth(container, periods[state._dbCalMonthIdx]); } });
         var title = el("div", { class: "cal-title", text: monthName + " " + yr });
-        var nextBtn = el("button", { class: "cal-nav-btn", text: (t("common.next") || "Next") + " u2192", onClick: function () { state._dbCalMonthIdx++; renderMonth(container, periods[state._dbCalMonthIdx]); } });
+        var nextBtn = el("button", { class: "cal-nav-btn", text: "→", onClick: function () { state._dbCalMonthIdx++; renderMonth(container, periods[state._dbCalMonthIdx]); } });
         if (state._dbCalMonthIdx <= 0) prevBtn.disabled = true;
         if (state._dbCalMonthIdx >= periods.length - 1) nextBtn.disabled = true;
         nav.appendChild(prevBtn);
@@ -8594,9 +9097,9 @@
 
       // Navigation header
       var nav = el("div", { class: "cal-header" });
-      var prevBtn = el("button", { class: "cal-nav-btn", text: "u2190 " + (t("common.back") || "Back"), onClick: function () { state._calMonthIdx--; renderCalendar(); } });
+      var prevBtn = el("button", { class: "cal-nav-btn", text: "←", onClick: function () { state._calMonthIdx--; renderCalendar(); } });
       var title = el("div", { class: "cal-title", text: monthName + " " + yr });
-      var nextBtn = el("button", { class: "cal-nav-btn", text: (t("common.next") || "Next") + " u2192", onClick: function () { state._calMonthIdx++; renderCalendar(); } });
+      var nextBtn = el("button", { class: "cal-nav-btn", text: "→", onClick: function () { state._calMonthIdx++; renderCalendar(); } });
       if (state._calMonthIdx <= 0) prevBtn.disabled = true;
       if (state._calMonthIdx >= periods.length - 1) nextBtn.disabled = true;
       nav.appendChild(prevBtn);
