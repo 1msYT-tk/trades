@@ -2640,6 +2640,46 @@
     .tz-wl-bar, .tz-wl-nums { width: 96px; }
     .tz-g5 .tz-stat-val { font-size: 20px; }
     .tz-g5 .tz-card { padding: 16px 16px; }
+    .tz-btn-on { border-color: var(--tz-primary); color: var(--tz-primary); background: var(--tz-primary-soft); }
+    .tz-pop { position: absolute; top: 44px; right: 0; width: 440px; max-width: 92vw; max-height: 72vh; overflow-y: auto; background: var(--tz-card); border: 1px solid var(--tz-border); border-radius: 12px; box-shadow: 0 16px 48px rgba(16, 24, 40, .2); padding: 14px 16px; z-index: 60; text-align: left; }
+    .tz-pop-sec { margin-bottom: 12px; }
+    .tz-pop-t { font-size: 12px; font-weight: 700; color: var(--tz-muted); margin-bottom: 6px; }
+    .tz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tz-chip { height: 28px; padding: 0 10px; border-radius: 14px; border: 1px solid var(--tz-border2); background: var(--tz-card); color: var(--tz-text); font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; }
+    .tz-chip:hover { border-color: var(--tz-primary); }
+    .tz-chip.on { background: var(--tz-primary-soft); border-color: var(--tz-primary); color: var(--tz-primary); font-weight: 600; }
+    .tz-chip.mis.on { background: var(--tz-red-soft); border-color: var(--tz-red); color: var(--tz-red); }
+    .tz-chip.add { border-style: dashed; color: var(--tz-muted); }
+    .tz-seg { display: inline-flex; border: 1px solid var(--tz-border2); border-radius: 9px; overflow: hidden; flex-wrap: wrap; }
+    .tz-seg button { height: 30px; padding: 0 12px; border: 0; background: var(--tz-card); color: var(--tz-text); font-size: 12px; cursor: pointer; border-right: 1px solid var(--tz-border2); font-family: inherit; }
+    .tz-seg button:last-child { border-right: 0; }
+    .tz-seg button.on { background: var(--tz-primary); color: #fff; }
+    .tz-stars { display: flex; gap: 2px; }
+    .tz-star { border: 0; background: none; font-size: 24px; line-height: 1; color: var(--tz-gray); cursor: pointer; padding: 0 2px; }
+    .tz-star.on { color: #F5B400; }
+    html.tz-on .tz-tpl-sel { height: 30px; font-size: 12px; padding: 0 8px; }
+    .tz-bulk { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: var(--tz-primary-soft); border-top: 1px solid var(--tz-border); flex-wrap: wrap; font-size: 13px; }
+    .tz-table th.cb, .tz-table td.cb { width: 38px; padding-right: 0; }
+    .tz-table input[type=checkbox] { accent-color: var(--tz-primary); width: 15px; height: 15px; cursor: pointer; }
+    .tz-table tr.selrow td { background: var(--tz-primary-soft); }
+    .tz-check.auto { color: var(--tz-muted); }
+    .tz-heat-wrap { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .tz-heat-dow { display: flex; flex-direction: column; gap: 3px; padding-top: 20px; }
+    .tz-heat-dow span { height: 14px; font-size: 10px; color: var(--tz-muted); line-height: 14px; }
+    .tz-heat-months { position: relative; height: 18px; font-size: 10.5px; color: var(--tz-muted); }
+    .tz-heat-months span { position: absolute; top: 0; white-space: nowrap; }
+    .tz-heat { display: flex; gap: 3px; }
+    .tz-heat-col { display: flex; flex-direction: column; gap: 3px; }
+    .tz-heat-cell { width: 14px; height: 14px; border-radius: 3px; background: var(--tz-card2); border: 1px solid var(--tz-border); cursor: pointer; display: inline-block; box-sizing: border-box; }
+    .tz-heat-cell.future { visibility: hidden; }
+    .tz-heat-cell.l0 { background: var(--tz-red-soft); border-color: rgba(240, 68, 56, .35); }
+    .tz-heat-cell.l1 { background: rgba(108, 76, 245, .2); border-color: transparent; }
+    .tz-heat-cell.l2 { background: rgba(108, 76, 245, .42); border-color: transparent; }
+    .tz-heat-cell.l3 { background: rgba(108, 76, 245, .66); border-color: transparent; }
+    .tz-heat-cell.l4 { background: var(--tz-primary); border-color: transparent; }
+    .tz-heat-cell.sel { outline: 2px solid var(--tz-text); outline-offset: 1px; }
+    .tz-heat-legend { display: flex; align-items: center; gap: 4px; margin-top: 12px; font-size: 11px; color: var(--tz-muted); }
+    .tz-heat-legend i { cursor: default; }
     html.tz-on #modalBox input, html.tz-on #modalBox select, html.tz-on #modalBox textarea { background: var(--tz-card); color: var(--tz-text); border-color: var(--tz-border2); }
   </style>
 </head>
@@ -10944,7 +10984,7 @@
       log: { page: 0, sortKey: "closeTime", sortDir: -1, status: "all", side: "all", setup: "all", q: "" },
       journalShown: 10, journalOpen: {}, journalFocus: null,
       nb: { folder: "all", noteId: null, q: "" },
-      pbOpen: null, reportTab: "overview",
+      pbOpen: null, reportTab: "overview", f: tzEmptyFilters(), progressDay: null,
     };
     let tzStore = { v: 1, accounts: {} };
     let _tzSaveTimer = null;
@@ -10992,6 +11032,9 @@
       if (!tzStore.accounts[id]) tzStore.accounts[id] = { journal: {}, folders: [], notes: [], playbooks: [], challenges: [] };
       const a = tzStore.accounts[id];
       a.journal = a.journal || {}; a.folders = a.folders || []; a.notes = a.notes || []; a.playbooks = a.playbooks || []; a.challenges = a.challenges || [];
+      a.templates = a.templates || TZ_DEFAULT_TEMPLATES.map(x => Object.assign({}, x));
+      a.mistakeList = a.mistakeList || TZ_DEFAULT_MISTAKES.slice();
+      a.progress = a.progress || { rules: [], checks: {}, maxLoss: 0, maxTrades: 0, journalRule: true };
       return a;
     }
     function tzSave() {
@@ -11040,7 +11083,7 @@
     function tzTrades() {
       const all = accountTrades();
       const f = tzRangeFilter();
-      return f ? applyFilters(all, f) : all;
+      return tzApplyFilters(f ? applyFilters(all, f) : all);
     }
     function tzDays(trades) {
       return cachedBucketBy(trades, "day", x => dayKeyOf(x.closeTime)).slice().sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
@@ -11161,11 +11204,11 @@
     // ---------- shell ----------
     const TZ_NAV = [
       ["dashboard", "Dashboard"], ["journal", "Daily Journal"], ["log", "Trade Log"], ["notebook", "Notebook"],
-      ["reports", "Reports"], ["insights", "Insights"], ["playbook", "Playbook"], ["challenges", "Challenges"],
+      ["reports", "Reports"], ["insights", "Insights"], ["playbook", "Playbook"], ["challenges", "Challenges"], ["progress", "Progress Tracker"],
     ];
     const TZ_PAGES = {
       dashboard: tzPageDashboard, journal: tzPageJournal, log: tzPageLog, notebook: tzPageNotebook,
-      reports: tzPageReports, insights: tzPageInsights, playbook: tzPagePlaybook, challenges: tzPageChallenges,
+      reports: tzPageReports, insights: tzPageInsights, playbook: tzPagePlaybook, challenges: tzPageChallenges, progress: tzPageProgress,
     };
     function renderTZ() {
       const root = document.getElementById("tzApp");
@@ -11190,6 +11233,9 @@
       }
       side.appendChild(nav);
       const foot = tzH("div", { class: "tz-side-foot" });
+      const mentorBtn = tzH("button", { class: "tz-ni", onClick: () => tzMentorModal() });
+      mentorBtn.innerHTML = tzIcon("share") + "<span>Mentor mode</span>";
+      foot.appendChild(mentorBtn);
       const setBtn = tzH("button", { class: "tz-ni", onClick: async () => { await tzSetMode(false); switchTab("settings"); } });
       setBtn.innerHTML = tzIcon("settings") + "<span>Accounts & settings</span>";
       const classicBtn = tzH("button", { class: "tz-ni", onClick: () => tzSetMode(false) });
@@ -11206,16 +11252,17 @@
       const startBtn = tzH("button", { class: "tz-btn primary", onClick: () => tzGo("journal", { focusDay: tzTodayKey() }) });
       startBtn.innerHTML = tzIcon("sunrise", 16) + "<span>Start my day</span>";
       tr.appendChild(startBtn);
+      tr.appendChild(tzFilterButton());
       const rangeSel = tzH("select", { class: "tz-select", title: "Date range" });
       for (const [v, l] of TZ_RANGES) rangeSel.appendChild(tzH("option", { value: v, text: l }));
       rangeSel.value = tzState.range;
-      rangeSel.addEventListener("change", () => { tzState.range = rangeSel.value; tzState.log.page = 0; renderTZ(); });
+      rangeSel.addEventListener("change", () => { tzState.range = rangeSel.value; tzState.log.page = 0; tzState.log.sel.clear(); renderTZ(); });
       tr.appendChild(rangeSel);
       const accSel = tzH("select", { class: "tz-select", title: "Account" });
       if (!state.accounts.length) accSel.appendChild(tzH("option", { value: "", text: "No account" }));
       for (const a of state.accounts) accSel.appendChild(tzH("option", { value: a.id, text: a.name }));
       accSel.value = state.activeAccountId || "";
-      accSel.addEventListener("change", () => { tzState.pbOpen = null; tzState.nb.noteId = null; setActiveAccount(accSel.value); });
+      accSel.addEventListener("change", () => { tzState.pbOpen = null; tzState.nb.noteId = null; tzState.log.sel.clear(); tzState.f = tzEmptyFilters(); setActiveAccount(accSel.value); });
       tr.appendChild(accSel);
       const themeBtn = tzH("button", { class: "tz-btn sm ghost", title: "Toggle light / dark", onClick: () => setTheme(state.theme === "dark" ? "light" : "dark") });
       themeBtn.innerHTML = tzIcon(state.theme === "dark" ? "sun" : "moon", 17);
@@ -11399,6 +11446,8 @@
       body.appendChild(dl);
       if (tr.comment) body.appendChild(tzH("div", { class: "tz-sub", style: "margin-top:-6px", text: "Comment: " + tr.comment }));
 
+      const rev = tzReviewBlock(tr);
+      body.appendChild(rev.node);
       body.appendChild(tzH("label", { class: "tz-label", text: "Playbook" }));
       const pbSel = tzH("select", { class: "tz-select", style: "width:100%" });
       pbSel.appendChild(tzH("option", { value: "", text: "No playbook" }));
@@ -11429,7 +11478,7 @@
       body.appendChild(tzH("label", { class: "tz-label", text: "Tags (comma separated)" }));
       const tagIn = tzH("input", { class: "tz-input", style: "width:100%", value: (tr.tags || []).join(", "), placeholder: "e.g. FOMO, A+ setup, news" });
       body.appendChild(tagIn);
-      body.appendChild(tzH("label", { class: "tz-label", text: "Trade notes" }));
+      body.appendChild(tzLabelRow(tzH("label", { class: "tz-label", text: "Trade notes" }), () => noteIn));
       const noteIn = tzH("textarea", { class: "tz-textarea", placeholder: "What did you see, why did you take it, what would you change?" });
       noteIn.value = tr.note || "";
       body.appendChild(noteIn);
@@ -11439,7 +11488,7 @@
       footer.appendChild(tzH("button", {
         class: "tz-btn primary", text: "Save", onClick: async () => {
           const tags = tagIn.value.split(",").map(s => s.trim()).filter(Boolean);
-          await saveTradeDetails(tr.ticket, { setup: pbSel.value || "", tags, note: noteIn.value, rulesFollowed: Array.from(followed) });
+          await saveTradeDetails(tr.ticket, Object.assign({ setup: pbSel.value || "", tags, note: noteIn.value, rulesFollowed: Array.from(followed) }, rev.get()));
           tzCloseDrawer();
         }
       }));
@@ -11547,7 +11596,7 @@
         ta.value = store.journal[d.key] || "";
         const persist = tzDebounce(() => { store.journal[d.key] = ta.value; tzSave(); saved.textContent = "Saved"; }, 400);
         ta.addEventListener("input", () => { saved.textContent = "Saving…"; persist(); });
-        noteBox.appendChild(lab); noteBox.appendChild(ta);
+        noteBox.appendChild(tzLabelRow(lab, () => ta)); noteBox.appendChild(ta);
         body.appendChild(noteBox);
         card.appendChild(body);
         c.appendChild(card);
@@ -11577,7 +11626,8 @@
       if (pre) rows = sd === 1 ? pre.slice() : stableReverseByCloseTime(pre);
       else {
         const coll = new Intl.Collator();
-        const val = sk === "duration" ? (tr => tr.closeTime - tr.openTime) : sk === "status" ? (tr => tr.netProfit) : (tr => tr[sk]);
+        const val = sk === "duration" ? (tr => tr.closeTime - tr.openTime) : sk === "status" ? (tr => tr.netProfit)
+          : sk === "r" ? (tr => { const r = tzTradeR(tr); return r === null ? -Infinity : r; }) : sk === "rating" ? (tr => tr.rating || 0) : (tr => tr[sk]);
         rows = rows === trades ? rows.slice() : rows;
         rows.sort((a, b) => {
           let va = val(a), vb = val(b);
@@ -11594,6 +11644,7 @@
       if (!trades.length) return tzNoTrades(c);
       const L = tzState.log;
       const rows = tzLogRows(trades);
+      if (L.sel.size) { const vis = new Set(rows); for (const x of Array.from(L.sel)) if (!vis.has(x)) L.sel.delete(x); }
       const acc = currentAccount();
       if (rows.length) {
         const m = computeMetrics(rows, acc.startingBalance || 0);
@@ -11611,22 +11662,30 @@
       fb.appendChild(mkSel(L.setup, [["all", "All playbooks"], ["__none__", "No playbook"]].concat(pbs), v => { L.setup = v; L.page = 0; renderTZ(); }));
       fb.appendChild(tzH("div", { class: "tz-sub", style: "margin-left:auto", text: fmtInt(rows.length) + " trade" + (rows.length === 1 ? "" : "s") }));
       card.appendChild(fb);
+      if (L.sel.size) card.appendChild(tzBulkBar(rows));
       const pages = Math.max(1, Math.ceil(rows.length / TZ_PAGE_SIZE));
       if (L.page >= pages) L.page = pages - 1;
       const pageRows = rows.slice(L.page * TZ_PAGE_SIZE, (L.page + 1) * TZ_PAGE_SIZE);
       const cols = [["openTime", "Open date", ""], ["symbol", "Symbol", ""], ["status", "Status", ""], ["closeTime", "Close date", ""], ["openPrice", "Entry price", "num"], ["closePrice", "Exit price", "num"],
-        ["netProfit", "Net P&L", "num"], ["setup", "Playbook", ""], ["direction", "Side", ""], ["volume", "Volume", "num"], ["duration", "Duration", "num"]];
+        ["netProfit", "Net P&L", "num"], ["r", "R", "num"], ["rating", "Rating", ""], ["setup", "Playbook", ""], ["direction", "Side", ""], ["volume", "Volume", "num"], ["duration", "Duration", "num"]];
       const wrap = tzH("div", { style: "overflow-x:auto" });
       const tbl = tzH("table", { class: "tz-table" });
-      let h = "<thead><tr>" + cols.map(([k, l, cl]) => '<th class="sort ' + cl + '" data-k="' + k + '">' + escapeHtml(l) + (L.sortKey === k ? (L.sortDir === 1 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
+      const pageAll = pageRows.length > 0 && pageRows.every(r => L.sel.has(r));
+      let h = '<thead><tr><th class="cb"><input type="checkbox" data-all="1"' + (pageAll ? " checked" : "") + ' title="Select this page"></th>' + cols.map(([k, l, cl]) => '<th class="sort ' + cl + '" data-k="' + k + '">' + escapeHtml(l) + (L.sortKey === k ? (L.sortDir === 1 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
       pageRows.forEach((tr, i) => {
-        h += '<tr class="click" data-i="' + i + '"><td>' + escapeHtml(fmtDate(tr.openTime)) + "</td><td><b>" + escapeHtml(tr.symbol) + "</b>" + (tr.note ? ' <span title="Has notes">📝</span>' : "") + "</td><td>" + tzBadge(tr) + "</td><td>" + escapeHtml(fmtDate(tr.closeTime)) +
-          '</td><td class="num">' + escapeHtml(fmtNum(tr.openPrice, 5)) + '</td><td class="num">' + escapeHtml(fmtNum(tr.closePrice, 5)) + '</td><td class="num ' + tzMoneyCls(tr.netProfit) + '"><b>' + escapeHtml(fmtMoney(tr.netProfit, 2)) + "</b></td><td>" +
+        const rr = tzTradeR(tr);
+        h += '<tr class="click' + (L.sel.has(tr) ? " selrow" : "") + '" data-i="' + i + '"><td class="cb"><input type="checkbox" data-cb="' + i + '"' + (L.sel.has(tr) ? " checked" : "") + "></td><td>" + escapeHtml(fmtDate(tr.openTime)) + "</td><td><b>" + escapeHtml(tr.symbol) + "</b>" + (tr.note ? ' <span title="Has notes">📝</span>' : "") + "</td><td>" + tzBadge(tr) + "</td><td>" + escapeHtml(fmtDate(tr.closeTime)) +
+          '</td><td class="num">' + escapeHtml(fmtNum(tr.openPrice, 5)) + '</td><td class="num">' + escapeHtml(fmtNum(tr.closePrice, 5)) + '</td><td class="num ' + tzMoneyCls(tr.netProfit) + '"><b>' + escapeHtml(fmtMoney(tr.netProfit, 2)) + "</b></td>" +
+          '<td class="num ' + (rr === null ? "" : tzMoneyCls(rr)) + '">' + (rr === null ? '<span style="color:var(--tz-dim)">—</span>' : fmtNum(rr, 2) + "R") + "</td>" +
+          "<td>" + (tr.rating ? '<span style="color:#F5B400;letter-spacing:1px">' + "★".repeat(tr.rating) + "</span>" : '<span style="color:var(--tz-dim)">—</span>') + "</td><td>" +
           (tr.setup ? '<span class="tz-pill">' + escapeHtml(tr.setup) + "</span>" : '<span style="color:var(--tz-dim)">—</span>') + "</td><td>" + tzSide(tr) + '</td><td class="num">' + escapeHtml(fmtNum(tr.volume, 2)) + '</td><td class="num">' + escapeHtml(fmtDuration(tr.closeTime - tr.openTime)) + "</td></tr>";
       });
-      if (!pageRows.length) h += '<tr><td colspan="' + cols.length + '" class="tz-empty">No trades match these filters.</td></tr>';
+      if (!pageRows.length) h += '<tr><td colspan="' + (cols.length + 1) + '" class="tz-empty">No trades match these filters.</td></tr>';
       tbl.innerHTML = h + "</tbody>";
       tbl.addEventListener("click", e => {
+        if (e.target.matches("input[data-all]")) { pageRows.forEach(r => e.target.checked ? L.sel.add(r) : L.sel.delete(r)); renderTZ(); return; }
+        if (e.target.matches("input[data-cb]")) { const r = pageRows[+e.target.dataset.cb]; if (e.target.checked) L.sel.add(r); else L.sel.delete(r); renderTZ(); return; }
+        if (e.target.closest("td.cb, th.cb")) return;
         const th = e.target.closest("th[data-k]");
         if (th) { const k = th.dataset.k; if (L.sortKey === k) L.sortDir = -L.sortDir; else { L.sortKey = k; L.sortDir = (k === "symbol" || k === "setup" || k === "direction") ? 1 : -1; } L.page = 0; renderTZ(); return; }
         const r = e.target.closest("tr[data-i]");
@@ -11669,7 +11728,7 @@
       const flist = tzH("div", { class: "tz-nb-list" });
       const tradeNotes = accountTrades().filter(tr => tr.note && String(tr.note).trim());
       const journalKeys = Object.keys(store.journal).filter(k => store.journal[k] && store.journal[k].trim()).sort().reverse();
-      const folders = [["all", "All notes", store.notes.length], ["__journal", "Daily journal", journalKeys.length], ["__trades", "Trade notes", tradeNotes.length]]
+      const folders = [["all", "All notes", store.notes.length], ["__journal", "Daily journal", journalKeys.length], ["__trades", "Trade notes", tradeNotes.length], ["__templates", "Templates", store.templates.length]]
         .concat(store.folders.map(f => [f.id, f.name, store.notes.filter(n => n.folderId === f.id).length]));
       folders.forEach(([id, name, n]) => {
         const it = tzH("div", { class: "tz-fold" + (S.folder === id ? " active" : "") });
@@ -11695,6 +11754,7 @@
       let items;
       if (S.folder === "__journal") items = journalKeys.map(k => ({ id: "j:" + k, title: tzLongDate(k), body: store.journal[k], updatedAt: tzKeyToDate(k).getTime(), kind: "journal", key: k }));
       else if (S.folder === "__trades") items = tradeNotes.slice().sort((a, b) => b.closeTime - a.closeTime).slice(0, 500).map(tr => ({ id: "t:" + tr.ticket, title: (tr.symbol || "—") + " · " + fmtDateOnly(tr.closeTime), body: tr.note, updatedAt: tr.closeTime, kind: "trade", trade: tr }));
+      else if (S.folder === "__templates") items = store.templates.map(tp => ({ id: "tp:" + tp.id, title: tp.name, body: tp.body, updatedAt: tp.updatedAt || 0, kind: "template", tpl: tp }));
       else items = store.notes.filter(n => S.folder === "all" || n.folderId === S.folder).slice().sort((a, b) => b.updatedAt - a.updatedAt).map(n => Object.assign({ kind: "note" }, n));
       const q = S.q.trim().toLowerCase();
       if (q) items = items.filter(i => (i.title || "").toLowerCase().includes(q) || (i.body || "").toLowerCase().includes(q));
@@ -11703,9 +11763,13 @@
       const sIn = tzH("input", { class: "tz-input", placeholder: "Search notes", value: S.q, style: "height:32px;flex:1;min-width:0" });
       sIn.addEventListener("input", tzDebounce(() => { S.q = sIn.value; renderTZ(); setTimeout(() => { const s = document.querySelector(".tz-nb .tz-nb-head .tz-input"); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }, 0); }, 300));
       nh.appendChild(sIn);
-      const canCreate = !S.folder.startsWith("__");
+      const canCreate = !S.folder.startsWith("__") || S.folder === "__templates";
       if (canCreate) nh.appendChild(tzH("button", {
-        class: "tz-btn sm primary", text: "+ Note", onClick: () => {
+        class: "tz-btn sm primary", text: S.folder === "__templates" ? "+ Template" : "+ Note", onClick: () => {
+          if (S.folder === "__templates") {
+            const tp = { id: tzUid(), name: "New template", body: "", updatedAt: Date.now() };
+            store.templates.push(tp); tzSave(); S.noteId = "tp:" + tp.id; renderTZ(); return;
+          }
           const n = { id: tzUid(), folderId: S.folder === "all" ? null : S.folder, title: "Untitled note", body: "", updatedAt: Date.now() };
           store.notes.push(n); tzSave(); S.noteId = n.id; renderTZ();
         }
@@ -11737,7 +11801,7 @@
         const saved = tzH("span", { class: "tz-saved" });
         const topRow = tzH("div", { style: "display:flex;align-items:center;gap:10px" });
         const tIn = tzH("input", { class: "tz-title-in", value: cur.title || "" });
-        if (cur.kind !== "note") tIn.disabled = true;
+        if (cur.kind !== "note" && cur.kind !== "template") tIn.disabled = true;
         topRow.appendChild(tIn);
         topRow.appendChild(saved);
         if (cur.kind === "note") {
@@ -11753,13 +11817,21 @@
               store.notes = store.notes.filter(x => x.id !== cur.id); tzSave(); S.noteId = null; renderTZ();
             }
           }));
+        } else if (cur.kind === "template") {
+          topRow.appendChild(tzH("button", {
+            class: "tz-btn sm danger", text: "Delete", onClick: () => {
+              if (!confirm("Delete this template?")) return;
+              store.templates = store.templates.filter(x => x.id !== cur.tpl.id); tzSave(); S.noteId = null; renderTZ();
+            }
+          }));
         } else if (cur.kind === "journal") {
           topRow.appendChild(tzH("button", { class: "tz-btn sm", text: "Open day", onClick: () => tzGo("journal", { focusDay: cur.key }) }));
         } else if (cur.kind === "trade") {
           topRow.appendChild(tzH("button", { class: "tz-btn sm", text: "Open trade", onClick: () => tzOpenTrade(cur.trade) }));
         }
         ed.appendChild(topRow);
-        ed.appendChild(tzH("div", { class: "tz-sub", text: cur.kind === "note" ? "Last edited " + new Date(cur.updatedAt).toLocaleString() : cur.kind === "journal" ? "Daily journal entry" : "Trade note · " + (cur.trade.direction || "") + " · " + fmtMoney(cur.trade.netProfit, 2, true) }));
+        if (cur.kind !== "template") topRow.insertBefore(tzTemplatePicker(() => ta), saved.nextSibling);
+        ed.appendChild(tzH("div", { class: "tz-sub", text: cur.kind === "template" ? "Template · insert it from any journal, note or trade-notes box" : cur.kind === "note" ? "Last edited " + new Date(cur.updatedAt).toLocaleString() : cur.kind === "journal" ? "Daily journal entry" : "Trade note · " + (cur.trade.direction || "") + " · " + fmtMoney(cur.trade.netProfit, 2, true) }));
         const ta = tzH("textarea", { class: "tz-textarea", placeholder: "Write…" });
         ta.value = cur.body || "";
         ed.appendChild(ta);
@@ -11767,6 +11839,9 @@
           if (cur.kind === "note") {
             const n = store.notes.find(x => x.id === cur.id);
             if (n) { n.title = tIn.value.trim() || "Untitled note"; n.body = ta.value; n.updatedAt = Date.now(); tzSave(); if (titleNodes[cur.id]) titleNodes[cur.id].textContent = n.title; }
+          } else if (cur.kind === "template") {
+            const tp = store.templates.find(x => x.id === cur.tpl.id);
+            if (tp) { tp.name = tIn.value.trim() || "Untitled template"; tp.body = ta.value; tp.updatedAt = Date.now(); tzSave(); if (titleNodes[cur.id]) titleNodes[cur.id].textContent = tp.name; }
           } else if (cur.kind === "journal") {
             store.journal[cur.key] = ta.value; tzSave();
           } else if (cur.kind === "trade") {
@@ -12151,7 +12226,7 @@
       const m = computeMetrics(trades, acc.startingBalance || 0);
       const days = tzDays(trades);
       const tabs = tzH("div", { class: "tz-tabs" });
-      [["overview", "Overview"], ["times", "Days & times"], ["symbols", "Symbols"], ["windays", "Win vs loss days"]].forEach(([k, l]) =>
+      [["overview", "Overview"], ["times", "Days & times"], ["symbols", "Symbols"], ["windays", "Win vs loss days"], ["tags", "Tags"], ["mistakes", "Mistakes"], ["rmultiple", "R-multiple"]].forEach(([k, l]) =>
         tabs.appendChild(tzH("button", { class: "tz-tab" + (tzState.reportTab === k ? " active" : ""), text: l, onClick: () => { tzState.reportTab = k; renderTZ(); } })));
       c.appendChild(tabs);
       const tab = tzState.reportTab;
@@ -12224,7 +12299,7 @@
         const w = tzH("div", { style: "overflow-x:auto" }); w.appendChild(tb); card.appendChild(w);
         if (syms.length > 300) card.appendChild(tzH("div", { class: "tz-pager", text: "Top 300 of " + fmtInt(syms.length) + " symbols by net P&L." }));
         c.appendChild(card);
-      } else {
+      } else if (tab === "windays") {
         const sumUp = list => {
           let n = 0, w = 0, net = 0, vol = 0, big = null;
           for (const d of list) { net += d.sum; n += d.total; w += d.wins; for (const tr of d.trades) vol += tr.volume || 0; if (!big || Math.abs(d.sum) > Math.abs(big.sum)) big = d; }
@@ -12241,7 +12316,656 @@
           g.appendChild(card);
         });
         c.appendChild(g);
+      } else {
+        tzReportExtra(c, tab, trades);
       }
+    }
+
+    // ===================== TZ: review fields, bulk actions, filters, templates, progress, mentor =====================
+    tzState.log.sel = new Set();
+    const TZ_DEFAULT_MISTAKES = ["FOMO entry", "Revenge trade", "Moved stop loss", "No stop loss", "Oversized position", "Early exit", "Late entry", "Broke a playbook rule", "Overtrading", "Traded during news"];
+    const TZ_DEFAULT_TEMPLATES = [
+      { id: "tpl-pre", name: "Pre-market plan", body: "Market bias:\nKey levels:\nNews / events today:\nSetups I'm watching:\nMax risk today:\nRules to focus on:\n" },
+      { id: "tpl-eod", name: "End-of-day recap", body: "What went well:\nWhat went wrong:\nMistakes made:\nDid I follow my plan? (yes / no, why):\nLesson for tomorrow:\n" },
+      { id: "tpl-week", name: "Weekly review", body: "Net P&L and win rate this week:\nBest trade and why:\nWorst trade and why:\nPatterns I noticed:\nFocus for next week:\n" },
+      { id: "tpl-trade", name: "Trade review", body: "Setup:\nEntry reason:\nExit reason:\nEmotions during the trade:\nWhat I'd do differently:\n" },
+    ];
+    Object.assign(TZ_ICON, {
+      progress: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="m14 17 2 2 4-4"/>',
+      share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
+      filter: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+    });
+
+    // ---------- R-multiple ----------
+    // Realized R uses the planned risk entered on the trade (money). Without it there is no R.
+    function tzTradeR(tr) {
+      return tr.plannedRisk > 0 ? tr.netProfit / tr.plannedRisk : null;
+    }
+
+    // ---------- global filters ----------
+    function tzEmptyFilters() {
+      return { symbols: [], side: "all", result: "all", playbooks: [], tags: [], mistakes: [], weekdays: [], minDur: "", maxDur: "", minRating: 0 };
+    }
+    function tzFilterCount(f) {
+      f = f || tzState.f;
+      if (!f) return 0;
+      let n = 0;
+      if (f.symbols.length) n++; if (f.side !== "all") n++; if (f.result !== "all") n++; if (f.playbooks.length) n++;
+      if (f.tags.length) n++; if (f.mistakes.length) n++; if (f.weekdays.length) n++; if (f.minDur !== "" || f.maxDur !== "") n++; if (f.minRating > 0) n++;
+      return n;
+    }
+    let _tzFilterMemo = null;
+    function tzApplyFilters(arr) {
+      const f = tzState.f;
+      if (!f || !tzFilterCount(f)) return arr;
+      const key = JSON.stringify(f) + "|" + _dataVersion;
+      if (_tzFilterMemo && _tzFilterMemo.src === arr && _tzFilterMemo.len === arr.length && _tzFilterMemo.key === key) return _tzFilterMemo.out;
+      const sym = f.symbols.length ? new Set(f.symbols) : null;
+      const pbs = f.playbooks.length ? new Set(f.playbooks) : null;
+      const tags = f.tags.length ? new Set(f.tags) : null;
+      const mis = f.mistakes.length ? new Set(f.mistakes) : null;
+      const wds = f.weekdays.length ? new Set(f.weekdays.map(Number)) : null;
+      const minD = f.minDur === "" ? -Infinity : +f.minDur * 60000, maxD = f.maxDur === "" ? Infinity : +f.maxDur * 60000;
+      const p = wds ? tradeTimeParts(arr) : null;
+      const out = [];
+      for (let i = 0; i < arr.length; i++) {
+        const tr = arr[i];
+        if (sym && !sym.has(tr.symbol)) continue;
+        if (f.side !== "all" && tr.direction !== f.side) continue;
+        if (f.result !== "all" && !(f.result === "win" ? tr.netProfit > 0 : f.result === "loss" ? tr.netProfit < 0 : tr.netProfit === 0)) continue;
+        if (pbs && !pbs.has(tr.setup || "__none__")) continue;
+        if (tags && !(tr.tags || []).some(x => tags.has(x))) continue;
+        if (mis && !(tr.mistakes || []).some(x => mis.has(x))) continue;
+        if (wds && !wds.has(p.wday[i])) continue;
+        const d = tr.closeTime - tr.openTime;
+        if (d < minD || d > maxD) continue;
+        if (f.minRating > 0 && !((tr.rating || 0) >= f.minRating)) continue;
+        out.push(tr);
+      }
+      _tzFilterMemo = { src: arr, len: arr.length, key, out };
+      return out;
+    }
+    function tzDistinct(field) {
+      const s = new Set();
+      for (const tr of accountTrades()) {
+        const v = tr[field];
+        if (Array.isArray(v)) v.forEach(x => x && s.add(x));
+        else if (v) s.add(v);
+      }
+      return Array.from(s).sort((a, b) => String(a).localeCompare(String(b)));
+    }
+    function tzFilterButton() {
+      const wrap = tzH("div", { style: "position:relative" });
+      const n = tzFilterCount();
+      const btn = tzH("button", { class: "tz-btn" + (n ? " tz-btn-on" : "") });
+      btn.innerHTML = tzIcon("filter", 15) + "<span>Filters" + (n ? " (" + n + ")" : "") + "</span>";
+      btn.addEventListener("click", e => { e.stopPropagation(); const open = wrap.querySelector(".tz-pop"); if (open) open.remove(); else wrap.appendChild(tzFilterPanel()); });
+      wrap.appendChild(btn);
+      return wrap;
+    }
+    function tzFilterPanel() {
+      const f = JSON.parse(JSON.stringify(tzState.f || tzEmptyFilters()));
+      const pop = tzH("div", { class: "tz-pop" });
+      pop.addEventListener("click", e => e.stopPropagation());
+      const close = () => pop.remove();
+      setTimeout(() => document.addEventListener("click", function h() { pop.remove(); document.removeEventListener("click", h); }), 0);
+      const sect = (title, node) => { const s = tzH("div", { class: "tz-pop-sec" }); s.appendChild(tzH("div", { class: "tz-pop-t", text: title })); s.appendChild(node); pop.appendChild(s); };
+      const chips = (values, selected, labelOf) => {
+        const box = tzH("div", { class: "tz-chips" });
+        if (!values.length) box.appendChild(tzH("span", { class: "tz-sub", text: "None yet" }));
+        values.forEach(v => {
+          const on = selected.includes(v);
+          const ch = tzH("button", { class: "tz-chip" + (on ? " on" : ""), text: labelOf ? labelOf(v) : String(v) });
+          ch.addEventListener("click", () => { const i = selected.indexOf(v); if (i >= 0) selected.splice(i, 1); else selected.push(v); ch.classList.toggle("on"); });
+          box.appendChild(ch);
+        });
+        return box;
+      };
+      const seg = (opts, get, set) => {
+        const box = tzH("div", { class: "tz-seg" });
+        opts.forEach(([v, l]) => {
+          const b = tzH("button", { class: get() === v ? "on" : "", text: l });
+          b.addEventListener("click", () => { set(v); box.querySelectorAll("button").forEach(x => x.classList.remove("on")); b.classList.add("on"); });
+          box.appendChild(b);
+        });
+        return box;
+      };
+      const syms = tzDistinct("symbol");
+      sect("Symbols" + (syms.length > 60 ? " (first 60)" : ""), chips(syms.slice(0, 60), f.symbols));
+      sect("Side", seg([["all", "All"], ["Long", "Long"], ["Short", "Short"]], () => f.side, v => f.side = v));
+      sect("Result", seg([["all", "All"], ["win", "Wins"], ["loss", "Losses"], ["be", "Breakeven"]], () => f.result, v => f.result = v));
+      sect("Playbook", chips(["__none__"].concat(tzAcc().playbooks.map(p => p.name)), f.playbooks, v => v === "__none__" ? "No playbook" : v));
+      sect("Tags", chips(tzDistinct("tags"), f.tags));
+      sect("Mistakes", chips(tzDistinct("mistakes"), f.mistakes));
+      sect("Day of week (close)", chips([1, 2, 3, 4, 5, 6, 0], f.weekdays, v => TZ_DOW[v]));
+      const dur = tzH("div", { style: "display:flex;gap:8px;align-items:center" });
+      const minIn = tzH("input", { class: "tz-input", type: "number", min: "0", placeholder: "min", value: f.minDur, style: "width:90px" });
+      const maxIn = tzH("input", { class: "tz-input", type: "number", min: "0", placeholder: "max", value: f.maxDur, style: "width:90px" });
+      minIn.addEventListener("input", () => f.minDur = minIn.value); maxIn.addEventListener("input", () => f.maxDur = maxIn.value);
+      dur.appendChild(minIn); dur.appendChild(tzH("span", { class: "tz-sub", text: "to" })); dur.appendChild(maxIn); dur.appendChild(tzH("span", { class: "tz-sub", text: "minutes" }));
+      sect("Trade duration", dur);
+      sect("Minimum rating", seg([[0, "Any"], [1, "1★+"], [2, "2★+"], [3, "3★+"], [4, "4★+"], [5, "5★"]], () => f.minRating, v => f.minRating = v));
+      const act = tzH("div", { style: "display:flex;justify-content:space-between;gap:8px;padding-top:12px;border-top:1px solid var(--tz-border);margin-top:4px" });
+      act.appendChild(tzH("button", { class: "tz-btn sm", text: "Clear all", onClick: () => { tzState.f = tzEmptyFilters(); tzState.log.page = 0; tzState.log.sel.clear(); close(); renderTZ(); } }));
+      act.appendChild(tzH("button", { class: "tz-btn sm primary", text: "Apply", onClick: () => { tzState.f = f; tzState.log.page = 0; tzState.log.sel.clear(); close(); renderTZ(); } }));
+      pop.appendChild(act);
+      return pop;
+    }
+
+    // ---------- templates ----------
+    function tzTemplatePicker(getTextarea) {
+      const sel = tzH("select", { class: "tz-select tz-tpl-sel", title: "Insert a template" });
+      sel.appendChild(tzH("option", { value: "", text: "Insert template…" }));
+      tzAcc().templates.forEach(tp => sel.appendChild(tzH("option", { value: tp.id, text: tp.name })));
+      sel.addEventListener("click", e => e.stopPropagation());
+      sel.addEventListener("change", () => {
+        const tp = tzAcc().templates.find(x => x.id === sel.value);
+        sel.value = "";
+        if (!tp) return;
+        const ta = getTextarea();
+        ta.value = ta.value.trim() ? ta.value.replace(/\s+$/, "") + "\n\n" + tp.body : tp.body;
+        ta.dispatchEvent(new Event("input"));
+        ta.focus();
+      });
+      return sel;
+    }
+    function tzLabelRow(labelNode, getTextarea) {
+      const row = tzH("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:10px" });
+      row.appendChild(labelNode);
+      row.appendChild(tzTemplatePicker(getTextarea));
+      return row;
+    }
+
+    // ---------- trade review block (drawer) ----------
+    function tzReviewBlock(tr) {
+      const store = tzAcc();
+      const node = tzH("div");
+      let rating = tr.rating || 0;
+      const mistakes = new Set(Array.isArray(tr.mistakes) ? tr.mistakes : []);
+      node.appendChild(tzH("label", { class: "tz-label", text: "Trade rating" }));
+      const stars = tzH("div", { class: "tz-stars" });
+      const drawStars = () => { stars.innerHTML = ""; for (let i = 1; i <= 5; i++) { const s = tzH("button", { class: "tz-star" + (i <= rating ? " on" : ""), text: "★", title: i + " star" + (i > 1 ? "s" : "") }); s.addEventListener("click", () => { rating = rating === i ? 0 : i; drawStars(); }); stars.appendChild(s); } };
+      drawStars();
+      node.appendChild(stars);
+      const rr = tzH("div", { class: "tz-dl", style: "margin:10px 0 0" });
+      const riskBox = tzH("div"), tgtBox = tzH("div"), outBox = tzH("div", { style: "grid-column:1 / -1" });
+      riskBox.appendChild(tzH("span", { text: "Planned risk (" + (currencySymbol() || "$").trim() + ")" }));
+      const riskIn = tzH("input", { class: "tz-input", type: "number", step: "any", min: "0", value: tr.plannedRisk > 0 ? String(tr.plannedRisk) : "", placeholder: "e.g. 100", style: "width:100%" });
+      riskBox.appendChild(riskIn);
+      tgtBox.appendChild(tzH("span", { text: "Profit target (" + (currencySymbol() || "$").trim() + ")" }));
+      const tgtIn = tzH("input", { class: "tz-input", type: "number", step: "any", min: "0", value: tr.plannedTarget > 0 ? String(tr.plannedTarget) : "", placeholder: "e.g. 200", style: "width:100%" });
+      tgtBox.appendChild(tgtIn);
+      const drawR = () => {
+        const risk = +riskIn.value, tgt = +tgtIn.value;
+        const planned = risk > 0 && tgt > 0 ? tgt / risk : null, realized = risk > 0 ? tr.netProfit / risk : null;
+        outBox.innerHTML = '<div style="display:flex;gap:24px"><div><span>Planned R</span><b>' + (planned === null ? "—" : fmtNum(planned, 2) + "R") + '</b></div><div><span>Realized R</span><b class="' + (realized === null ? "" : tzMoneyCls(realized)) + '">' + (realized === null ? "—" : fmtNum(realized, 2) + "R") + "</b></div></div>";
+      };
+      riskIn.addEventListener("input", drawR); tgtIn.addEventListener("input", drawR); drawR();
+      rr.appendChild(riskBox); rr.appendChild(tgtBox); rr.appendChild(outBox);
+      node.appendChild(rr);
+      node.appendChild(tzH("label", { class: "tz-label", text: "Mistakes" }));
+      const mbox = tzH("div", { class: "tz-chips" });
+      const drawM = () => {
+        mbox.innerHTML = "";
+        const all = Array.from(new Set(store.mistakeList.concat(Array.from(mistakes))));
+        all.forEach(mk => {
+          const c = tzH("button", { class: "tz-chip mis" + (mistakes.has(mk) ? " on" : ""), text: mk });
+          c.addEventListener("click", () => { if (mistakes.has(mk)) mistakes.delete(mk); else mistakes.add(mk); c.classList.toggle("on"); });
+          mbox.appendChild(c);
+        });
+        const add = tzH("button", { class: "tz-chip add", text: "+ Add" });
+        add.addEventListener("click", () => {
+          const v = (prompt("New mistake") || "").trim();
+          if (!v) return;
+          if (!store.mistakeList.includes(v)) { store.mistakeList.push(v); tzSave(); }
+          mistakes.add(v); drawM();
+        });
+        mbox.appendChild(add);
+      };
+      drawM();
+      node.appendChild(mbox);
+      return {
+        node,
+        get: () => ({ rating, mistakes: Array.from(mistakes), plannedRisk: +riskIn.value > 0 ? +riskIn.value : 0, plannedTarget: +tgtIn.value > 0 ? +tgtIn.value : 0 }),
+      };
+    }
+
+    // ---------- bulk actions ----------
+    async function tzBulkUpdate(list, fn) {
+      for (const tr of list) fn(tr);
+      invalidateTradeCache();
+      noteImportTouched(list);
+      for (let i = 0; i < list.length; i += 5000) await idbPutAll(state.db, "trades", list.slice(i, i + 5000));
+    }
+    async function tzBulkDelete(list) {
+      const gone = new Set(list);
+      await new Promise((res, rej) => {
+        const t = state.db.transaction("trades", "readwrite");
+        const os = t.objectStore("trades");
+        for (const tr of list) os.delete([tr.accountId, tr.ticket]);
+        t.oncomplete = () => res();
+        t.onerror = () => rej(t.error);
+      });
+      state.trades = state.trades.filter(tr => !gone.has(tr));
+      invalidateTradeCache();
+    }
+    function tzBulkBar(rows) {
+      const L = tzState.log, sel = L.sel;
+      const bar = tzH("div", { class: "tz-bulk" });
+      bar.appendChild(tzH("b", { text: fmtInt(sel.size) + " selected" }));
+      if (sel.size < rows.length) bar.appendChild(tzH("button", { class: "tz-link", text: "Select all " + fmtInt(rows.length) + " matching", onClick: () => { rows.forEach(r => sel.add(r)); renderTZ(); } }));
+      bar.appendChild(tzH("button", { class: "tz-link", text: "Clear", onClick: () => { sel.clear(); renderTZ(); } }));
+      const right = tzH("div", { style: "margin-left:auto;display:flex;gap:8px;flex-wrap:wrap" });
+      const list = () => Array.from(sel);
+      const pb = tzH("select", { class: "tz-select" });
+      pb.appendChild(tzH("option", { value: "", text: "Assign playbook…" }));
+      tzAcc().playbooks.forEach(p => pb.appendChild(tzH("option", { value: p.name, text: p.name })));
+      pb.appendChild(tzH("option", { value: "__clear__", text: "Remove playbook" }));
+      pb.addEventListener("change", async () => {
+        const v = pb.value; if (!v) return;
+        const l = list();
+        await tzBulkUpdate(l, tr => { tr.setup = v === "__clear__" ? "" : v; if (v === "__clear__") tr.rulesFollowed = []; });
+        toast("Trade Log", (v === "__clear__" ? "Removed playbook from " : "Assigned \"" + v + "\" to ") + fmtInt(l.length) + " trades", "success", 3000);
+        renderTZ();
+      });
+      right.appendChild(pb);
+      right.appendChild(tzH("button", {
+        class: "tz-btn sm", text: "+ Tags", onClick: async () => {
+          const v = (prompt("Tags to add (comma separated)") || "").split(",").map(s => s.trim()).filter(Boolean);
+          if (!v.length) return;
+          const l = list();
+          await tzBulkUpdate(l, tr => { const s = new Set(tr.tags || []); v.forEach(x => s.add(x)); tr.tags = Array.from(s); });
+          toast("Trade Log", "Tagged " + fmtInt(l.length) + " trades", "success", 3000); renderTZ();
+        }
+      }));
+      const mk = tzH("select", { class: "tz-select" });
+      mk.appendChild(tzH("option", { value: "", text: "Add mistake…" }));
+      tzAcc().mistakeList.forEach(m => mk.appendChild(tzH("option", { value: m, text: m })));
+      mk.addEventListener("change", async () => {
+        const v = mk.value; if (!v) return;
+        const l = list();
+        await tzBulkUpdate(l, tr => { const s = new Set(tr.mistakes || []); s.add(v); tr.mistakes = Array.from(s); });
+        toast("Trade Log", "Marked " + fmtInt(l.length) + " trades: " + v, "success", 3000); renderTZ();
+      });
+      right.appendChild(mk);
+      right.appendChild(tzH("button", {
+        class: "tz-btn sm danger", text: "Delete", onClick: async () => {
+          const l = list();
+          if (typeof importSaveGuard === "function" && importSaveGuard()) return;
+          if (!await confirmModal("Delete trades", "Delete " + fmtInt(l.length) + " trade(s) from this account? This cannot be undone.")) return;
+          await tzBulkDelete(l);
+          sel.clear();
+          toast("Trade Log", "Deleted " + fmtInt(l.length) + " trades", "success", 3000);
+          renderTZ();
+        }
+      }));
+      bar.appendChild(right);
+      return bar;
+    }
+
+    // ---------- extra reports: tags, mistakes, R ----------
+    function tzMultiBuckets(trades, field) {
+      const map = new Map();
+      let none = 0;
+      for (const tr of trades) {
+        const vals = Array.isArray(tr[field]) ? tr[field] : [];
+        if (!vals.length) { none++; continue; }
+        for (const v of vals) {
+          let b = map.get(v);
+          if (!b) { b = { key: v, total: 0, sum: 0, wins: 0, losses: 0, gp: 0, gl: 0 }; map.set(v, b); }
+          b.total++; b.sum += tr.netProfit;
+          if (tr.netProfit > 0) { b.wins++; b.gp += tr.netProfit; } else if (tr.netProfit < 0) { b.losses++; b.gl -= tr.netProfit; }
+        }
+      }
+      return { list: Array.from(map.values()).sort((a, b) => a.sum - b.sum), none };
+    }
+    function tzGroupTable(list, label) {
+      const card = tzH("div", { class: "tz-card flush" });
+      const tb = tzH("table", { class: "tz-table" });
+      let h = "<thead><tr><th>" + escapeHtml(label) + '</th><th class="num">Trades</th><th class="num">Win %</th><th class="num">Net P&amp;L</th><th class="num">Avg P&amp;L</th><th class="num">Profit factor</th></tr></thead><tbody>';
+      list.forEach(b => { h += "<tr><td><b>" + escapeHtml(b.key) + '</b></td><td class="num">' + fmtInt(b.total) + '</td><td class="num">' + fmtPct(b.wins / b.total, 1) + '</td><td class="num ' + tzMoneyCls(b.sum) + '"><b>' + escapeHtml(fmtMoney(b.sum, 2)) + '</b></td><td class="num">' + escapeHtml(fmtMoney(b.sum / b.total, 2)) + '</td><td class="num">' + fmtNum(b.gl > 0 ? b.gp / b.gl : (b.gp > 0 ? Infinity : 0), 2) + "</td></tr>"; });
+      tb.innerHTML = h + "</tbody>";
+      const w = tzH("div", { style: "overflow-x:auto" }); w.appendChild(tb); card.appendChild(w);
+      return card;
+    }
+    function tzReportExtra(c, tab, trades) {
+      if (tab === "tags" || tab === "mistakes") {
+        const field = tab;
+        const { list, none } = tzMultiBuckets(trades, field);
+        const noun = tab === "tags" ? "tag" : "mistake";
+        if (!list.length) return tzEmpty(c, tab === "tags" ? "No tagged trades" : "No mistakes logged", "Open a trade from the Trade Log (or select many and use the bulk bar) to add " + noun + "s.", [tzH("button", { class: "tz-btn primary", text: "Open Trade Log", onClick: () => tzGo("log") })]);
+        if (tab === "mistakes") {
+          let cost = 0, n = 0;
+          for (const tr of trades) if (Array.isArray(tr.mistakes) && tr.mistakes.length) { cost += tr.netProfit; n++; }
+          const worst = list[0];
+          const row = tzH("div", { class: "tz-grid tz-g3 tz-mb" });
+          row.appendChild(tzStatCard("Net P&L of trades with mistakes", "", '<span class="' + tzMoneyCls(cost) + '">' + escapeHtml(fmtMoney(cost, 2)) + "</span>", "", '<div style="margin-top:10px"><span class="tz-pill">' + fmtInt(n) + " trades</span></div>"));
+          row.appendChild(tzStatCard("Most costly mistake", "", escapeHtml(worst.key), "", '<div class="tz-sub ' + tzMoneyCls(worst.sum) + '" style="margin-top:8px">' + escapeHtml(fmtMoney(worst.sum, 2)) + " over " + fmtInt(worst.total) + " trades</div>"));
+          row.appendChild(tzStatCard("Trades without mistakes", "", fmtPct(trades.length ? none / trades.length : 0, 1), "", '<div class="tz-sub" style="margin-top:8px">' + fmtInt(none) + " of " + fmtInt(trades.length) + "</div>"));
+          c.appendChild(row);
+        } else {
+          c.appendChild(tzH("div", { class: "tz-sub tz-mb", text: fmtInt(trades.length - none) + " of " + fmtInt(trades.length) + " trades have tags. A trade with several tags counts in each." }));
+        }
+        const card = tzCard("Net P&L by " + noun);
+        const ch = tzChartBox();
+        card.appendChild(ch.wrap);
+        card.classList.add("tz-mb");
+        c.appendChild(card);
+        drawBarChart(ch.canvas, list.slice().sort((a, b) => b.sum - a.sum).slice(0, 40).map(b => ({ label: b.key, value: b.sum, tipExtra: fmtInt(b.total) + " trades" })), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+        c.appendChild(tzGroupTable(list.slice().sort((a, b) => b.sum - a.sum), tab === "tags" ? "Tag" : "Mistake"));
+        return;
+      }
+      if (tab === "rmultiple") {
+        const rs = [], planned = [];
+        let wins = 0, hitTarget = 0, withTarget = 0, wr = 0, lr = 0, wn = 0, ln = 0;
+        for (const tr of trades) {
+          const r = tzTradeR(tr);
+          if (r === null) continue;
+          rs.push(r);
+          if (r > 0) { wins++; wr += r; wn++; } else if (r < 0) { lr += r; ln++; }
+          if (tr.plannedTarget > 0) { const p = tr.plannedTarget / tr.plannedRisk; planned.push(p); withTarget++; if (r >= p) hitTarget++; }
+        }
+        if (!rs.length) return tzEmpty(c, "No R-multiple data yet", "Enter a planned risk on trades (trade panel → Planned risk). R = net P&L ÷ planned risk.", [tzH("button", { class: "tz-btn primary", text: "Open Trade Log", onClick: () => tzGo("log") })]);
+        const avg = rs.reduce((s, x) => s + x, 0) / rs.length;
+        const row = tzH("div", { class: "tz-grid tz-g4 tz-mb" });
+        row.appendChild(tzStatCard("Average R (expectancy)", "Average realized R per trade", '<span class="' + tzMoneyCls(avg) + '">' + fmtNum(avg, 2) + "R</span>", "", '<div style="margin-top:10px"><span class="tz-pill">' + fmtInt(rs.length) + " trades with risk</span></div>"));
+        row.appendChild(tzStatCard("Avg winner / loser", "", '<span class="tz-pos">' + fmtNum(wn ? wr / wn : 0, 2) + 'R</span> <span style="color:var(--tz-dim)">/</span> <span class="tz-neg">' + fmtNum(ln ? lr / ln : 0, 2) + "R</span>"));
+        row.appendChild(tzStatCard("Avg planned R", "Profit target ÷ planned risk", planned.length ? fmtNum(planned.reduce((s, x) => s + x, 0) / planned.length, 2) + "R" : "—"));
+        row.appendChild(tzStatCard("Reached planned R", "Trades whose realized R met the planned R", withTarget ? fmtPct(hitTarget / withTarget, 1) : "—", "", '<div class="tz-sub" style="margin-top:8px">' + fmtInt(hitTarget) + " of " + fmtInt(withTarget) + "</div>"));
+        c.appendChild(row);
+        const card = tzCard("R-multiple distribution");
+        const ch = tzChartBox();
+        card.appendChild(ch.wrap);
+        c.appendChild(card);
+        drawHistogram(ch.canvas, rs, { bins: Math.min(30, Math.max(8, Math.round(Math.sqrt(rs.length)))), binFormat: v => fmtNum(v, 1) + "R" });
+      }
+    }
+
+    // ---------- Progress tracker ----------
+    function tzProgressRules() {
+      const P = tzAcc().progress;
+      const rules = P.rules.map(r => ({ id: r.id, text: r.text, auto: false }));
+      if (P.maxLoss > 0) rules.push({ id: "auto-loss", text: "Daily loss stayed under " + fmtMoney(P.maxLoss, 0), auto: true });
+      if (P.maxTrades > 0) rules.push({ id: "auto-trades", text: "At most " + P.maxTrades + " trades", auto: true });
+      if (P.journalRule) rules.push({ id: "auto-journal", text: "Wrote a journal entry", auto: true });
+      return rules;
+    }
+    // For one day: which rules are met. Auto rules use that day's trades / journal.
+    function tzProgressDay(key, dayMap) {
+      const store = tzAcc(), P = store.progress;
+      const rules = tzProgressRules();
+      const checks = new Set(P.checks[key] || []);
+      const d = dayMap.get(key);
+      const hasJournal = !!(store.journal[key] && store.journal[key].trim());
+      const status = rules.map(r => {
+        if (!r.auto) return { r, met: checks.has(r.id), na: false };
+        if (r.id === "auto-journal") return { r, met: hasJournal, na: false };
+        if (!d) return { r, met: false, na: true };
+        if (r.id === "auto-loss") return { r, met: d.sum >= -P.maxLoss, na: false };
+        return { r, met: d.total <= P.maxTrades, na: false };
+      });
+      const applicable = status.filter(s => !s.na);
+      const met = applicable.filter(s => s.met).length;
+      const tracked = !!d || checks.size > 0 || hasJournal;
+      return { status, pct: applicable.length ? met / applicable.length : 0, tracked, met, total: applicable.length };
+    }
+    function tzRulesForm() {
+      const P = tzAcc().progress;
+      const form = tzH("div", { style: "display:flex;flex-direction:column;gap:4px;min-width:min(520px,80vw)" });
+      form.appendChild(tzH("label", { class: "tz-label", text: "Your daily rules (one per line, you tick them yourself)" }));
+      const ta = tzH("textarea", { class: "tz-textarea", placeholder: "Followed my pre-market routine\nOnly traded my playbook setups\nStopped after 2 losses in a row\nNo trading during red-folder news" });
+      ta.value = P.rules.map(r => r.text).join("\n");
+      form.appendChild(ta);
+      form.appendChild(tzH("label", { class: "tz-label", text: "Automatic rules (checked from your trades)" }));
+      const g = tzH("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:10px" });
+      const lossIn = tzH("input", { class: "tz-input", type: "number", step: "any", min: "0", value: P.maxLoss || "", placeholder: "Max daily loss (0 = off)", style: "width:100%" });
+      const trIn = tzH("input", { class: "tz-input", type: "number", step: "1", min: "0", value: P.maxTrades || "", placeholder: "Max trades per day (0 = off)", style: "width:100%" });
+      g.appendChild(lossIn); g.appendChild(trIn);
+      form.appendChild(g);
+      const jl = tzH("label", { class: "tz-check" });
+      const jc = tzH("input", { type: "checkbox" }); jc.checked = !!P.journalRule;
+      jl.appendChild(jc); jl.appendChild(document.createTextNode("Wrote a journal entry that day"));
+      form.appendChild(jl);
+      const actions = tzH("div", { style: "display:flex;justify-content:flex-end;gap:8px;margin-top:16px" });
+      actions.appendChild(tzH("button", { class: "tz-btn", text: "Cancel", onClick: () => closeModal() }));
+      actions.appendChild(tzH("button", {
+        class: "tz-btn primary", text: "Save rules", onClick: () => {
+          const lines = ta.value.split("\n").map(s => s.trim()).filter(Boolean);
+          const old = new Map(P.rules.map(r => [r.text, r.id]));
+          P.rules = lines.map(text => ({ id: old.get(text) || tzUid(), text }));
+          P.maxLoss = +lossIn.value > 0 ? +lossIn.value : 0;
+          P.maxTrades = +trIn.value > 0 ? Math.round(+trIn.value) : 0;
+          P.journalRule = jc.checked;
+          tzSave(); closeModal(); renderTZ();
+        }
+      }));
+      form.appendChild(actions);
+      showModal("Progress tracker rules", form);
+    }
+    function tzPageProgress(c) {
+      const store = tzAcc(), P = store.progress;
+      const rules = tzProgressRules();
+      const days = tzDays(accountTrades());
+      const dayMap = new Map(days.map(d => [d.key, d]));
+      const today = tzTodayKey();
+      const sel = tzState.progressDay || today;
+      const bar = tzH("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap" });
+      bar.appendChild(tzH("div", { class: "tz-sub", text: "Tick your rules every day. Automatic rules are checked against your trades and journal." }));
+      bar.appendChild(tzH("button", { class: "tz-btn primary", text: rules.length ? "Edit rules" : "+ Set up rules", onClick: tzRulesForm }));
+      c.appendChild(bar);
+      if (!rules.length) return tzEmpty(c, "No rules yet", "Add the habits you want to build, like following your pre-market routine or stopping after two losses. You can also switch on automatic rules for daily loss, trade count and journaling.", [tzH("button", { class: "tz-btn primary", text: "+ Set up rules", onClick: tzRulesForm })]);
+
+      // range: last 26 weeks ending this week, plus any earlier tracked days for streak stats
+      const keys = new Set(Object.keys(P.checks).concat(days.map(d => d.key)).concat(Object.keys(store.journal).filter(k => store.journal[k] && store.journal[k].trim())));
+      const sortedKeys = Array.from(keys).sort();
+      let cur = 0, best = 0, run = 0, last30 = [], prevDate = null;
+      // Heatmap, streak and 30-day stats are anchored on the selected day, so backtests from past years show up
+      const anchor = tzKeyToDate(sel);
+      const cutoff30 = dayKeyOf(anchor.getTime() - 29 * 86400000);
+      for (const k of sortedKeys) {
+        if (k > sel) break;
+        const r = tzProgressDay(k, dayMap);
+        if (!r.tracked) continue;
+        if (r.pct >= 1) { run++; if (run > best) best = run; } else run = 0;
+        if (k >= cutoff30) last30.push(r.pct);
+        prevDate = k;
+      }
+      cur = run;
+      const selR = tzProgressDay(sel, dayMap);
+      const row = tzH("div", { class: "tz-grid tz-g4 tz-mb" });
+      row.appendChild(tzStatCard(sel === today ? "Today's score" : "Score " + sel, "", fmtPct(selR.pct, 0), "", '<div class="tz-sub" style="margin-top:8px">' + selR.met + " of " + selR.total + " rules</div>"));
+      row.appendChild(tzStatCard(sel === today ? "Current streak" : "Streak on " + sel, "Tracked days in a row with every rule met, up to the selected day", fmtInt(cur) + " day" + (cur === 1 ? "" : "s")));
+      row.appendChild(tzStatCard("Best streak", "", fmtInt(best) + " day" + (best === 1 ? "" : "s")));
+      row.appendChild(tzStatCard(sel === today ? "Last 30 days" : "30 days to " + sel, "Average completion on tracked days", last30.length ? fmtPct(last30.reduce((s, x) => s + x, 0) / last30.length, 0) : "—", "", '<div class="tz-sub" style="margin-top:8px">' + last30.length + " tracked days</div>"));
+      c.appendChild(row);
+
+      const grid = tzH("div", { class: "tz-grid tz-g-dash3" });
+      const cl = tzH("div", { class: "tz-card" });
+      const ch = tzH("div", { class: "tz-card-h" });
+      ch.appendChild(tzH("div", { class: "tz-card-t", text: "Daily checklist" }));
+      const dIn = tzH("input", { class: "tz-input", type: "date", value: sel, max: today });
+      dIn.addEventListener("change", () => { if (/^\d{4}-\d{2}-\d{2}$/.test(dIn.value)) { tzState.progressDay = dIn.value; renderTZ(); } });
+      ch.appendChild(dIn);
+      cl.appendChild(ch);
+      cl.appendChild(tzH("div", { class: "tz-sub", style: "margin-bottom:8px", text: tzLongDate(sel) + (dayMap.get(sel) ? " · " + fmtInt(dayMap.get(sel).total) + " trades · " + fmtMoney(dayMap.get(sel).sum, 2) : " · no trades") }));
+      selR.status.forEach(s => {
+        const lab = tzH("label", { class: "tz-check" + (s.r.auto ? " auto" : "") });
+        const cb = tzH("input", { type: "checkbox" });
+        cb.checked = s.met;
+        if (s.r.auto) cb.disabled = true;
+        else cb.addEventListener("change", () => {
+          const set = new Set(P.checks[sel] || []);
+          if (cb.checked) set.add(s.r.id); else set.delete(s.r.id);
+          if (set.size) P.checks[sel] = Array.from(set); else delete P.checks[sel];
+          tzSave(); renderTZ();
+        });
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(s.r.text));
+        if (s.r.auto) lab.appendChild(tzH("span", { class: "tz-pill", style: "margin-left:auto", text: s.na ? "no trades" : "auto" }));
+        cl.appendChild(lab);
+      });
+      grid.appendChild(cl);
+
+      const hm = tzCard("Consistency heatmap", "Share of rules met per day, 26 weeks up to the selected day. Click a day to open its checklist.");
+      const end = tzKeyToDate(sel);
+      const start = new Date(end); start.setDate(start.getDate() - (25 * 7 + end.getDay()));
+      const wrap = tzH("div", { class: "tz-heat-wrap" });
+      const dowCol = tzH("div", { class: "tz-heat-dow" });
+      ["", "Mon", "", "Wed", "", "Fri", ""].forEach(x => dowCol.appendChild(tzH("span", { text: x })));
+      wrap.appendChild(dowCol);
+      const heat = tzH("div", { class: "tz-heat" });
+      const months = tzH("div", { class: "tz-heat-months" });
+      let lastMonth = -1;
+      for (let w = 0; w < 26; w++) {
+        const col = tzH("div", { class: "tz-heat-col" });
+        for (let dw = 0; dw < 7; dw++) {
+          const dt = new Date(start); dt.setDate(start.getDate() + w * 7 + dw);
+          const k = dayKeyOf(dt.getTime());
+          const cell = tzH("div", { class: "tz-heat-cell" });
+          if (dt > end) { cell.classList.add("future"); col.appendChild(cell); continue; }
+          const r = tzProgressDay(k, dayMap);
+          if (r.tracked) {
+            const lvl = r.pct >= 1 ? 4 : r.pct >= 0.75 ? 3 : r.pct >= 0.5 ? 2 : r.pct > 0 ? 1 : 0;
+            cell.classList.add("l" + lvl);
+          }
+          if (k === sel) cell.classList.add("sel");
+          cell.title = tzLongDate(k) + (r.tracked ? " · " + r.met + "/" + r.total + " rules" : " · not tracked");
+          cell.addEventListener("click", () => { tzState.progressDay = k; renderTZ(); });
+          col.appendChild(cell);
+          if (dw === 0 && dt.getMonth() !== lastMonth) {
+            lastMonth = dt.getMonth();
+            const prev = months.lastChild;
+            if (prev && w * 17 - parseInt(prev.style.left, 10) < 34) prev.remove();
+            months.appendChild(tzH("span", { style: "left:" + (w * 17) + "px", text: TZ_MONTHS[lastMonth].slice(0, 3) }));
+          }
+        }
+        heat.appendChild(col);
+      }
+      const hw = tzH("div");
+      hw.appendChild(months);
+      hw.appendChild(heat);
+      wrap.appendChild(hw);
+      hm.appendChild(wrap);
+      const legend = tzH("div", { class: "tz-heat-legend" });
+      legend.innerHTML = '<span>Less</span><i class="tz-heat-cell"></i><i class="tz-heat-cell l0"></i><i class="tz-heat-cell l1"></i><i class="tz-heat-cell l2"></i><i class="tz-heat-cell l3"></i><i class="tz-heat-cell l4"></i><span>All rules met</span>';
+      hm.appendChild(legend);
+      grid.appendChild(hm);
+      c.appendChild(grid);
+    }
+
+    // ---------- Mentor mode: read-only snapshot ----------
+    function tzMentorModal() {
+      const form = tzH("div", { style: "display:flex;flex-direction:column;gap:4px;min-width:min(520px,80vw)" });
+      form.appendChild(tzH("div", { class: "tz-sub", style: "line-height:1.55", text: "Creates a single read-only HTML page with your stats, equity curve, calendar, playbooks, journal and recent trades for the current date range and filters. Send the file to your mentor; it opens in any browser, no account or install needed." }));
+      const opts = {};
+      [["journal", "Include daily journal notes", true], ["tradeNotes", "Include trade notes, tags and mistakes", true], ["trades", "Include the latest 300 trades", true], ["notebook", "Include notebook notes", false]].forEach(([k, l, def]) => {
+        const lab = tzH("label", { class: "tz-check" });
+        const cb = tzH("input", { type: "checkbox" }); cb.checked = def; opts[k] = cb;
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(l));
+        form.appendChild(lab);
+      });
+      const actions = tzH("div", { style: "display:flex;justify-content:flex-end;gap:8px;margin-top:16px" });
+      actions.appendChild(tzH("button", { class: "tz-btn", text: "Cancel", onClick: () => closeModal() }));
+      actions.appendChild(tzH("button", {
+        class: "tz-btn primary", text: "Download snapshot", onClick: () => {
+          const o = {}; for (const k in opts) o[k] = opts[k].checked;
+          const html = tzMentorHTML(o);
+          if (!html) { toast("Mentor mode", "No trades in the current range and filters.", "error"); return; }
+          const acc = currentAccount();
+          const blob = new Blob([html], { type: "text/html" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "TradeSave-mentor-" + String(acc.name || "account").replace(/[^\w-]+/g, "_") + "-" + tzTodayKey() + ".html";
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+          closeModal();
+          toast("Mentor mode", "Snapshot downloaded. Send the file to your mentor.", "success", 5000);
+        }
+      }));
+      form.appendChild(actions);
+      showModal("Mentor mode: share a read-only snapshot", form);
+    }
+    function tzMentorHTML(o) {
+      const trades = tzTrades();
+      if (!trades.length) return null;
+      const acc = currentAccount(), store = tzAcc();
+      const m = computeMetrics(trades, acc.startingBalance || 0);
+      const days = tzDays(trades);
+      const E = escapeHtml, cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
+      let dw = 0; days.forEach(d => { if (d.sum > 0) dw++; });
+      const score = tradeSaveScore(m).score;
+      const rangeLabel = (TZ_RANGES.find(r => r[0] === tzState.range) || [0, "All time"])[1] + (tzFilterCount() ? " · " + tzFilterCount() + " filter(s)" : "");
+      // equity SVG from daily cumulative
+      let run = 0; const pts = days.map(d => (run += d.sum));
+      const W = 900, H = 220, lo = Math.min(0, ...pts), hi = Math.max(0, ...pts), span = (hi - lo) || 1;
+      const sx = i => pts.length > 1 ? (i / (pts.length - 1)) * W : W / 2, sy = v => H - ((v - lo) / span) * H;
+      const poly = pts.map((v, i) => sx(i).toFixed(1) + "," + sy(v).toFixed(1)).join(" ");
+      const lineCol = run >= 0 ? "#12B76A" : "#F04438";
+      const svg = '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" style="width:100%;height:220px"><line x1="0" x2="' + W + '" y1="' + sy(0).toFixed(1) + '" y2="' + sy(0).toFixed(1) + '" stroke="#DCDDE8" stroke-dasharray="4 4"/>' +
+        '<polygon fill="' + lineCol + '22" points="0,' + sy(0).toFixed(1) + " " + poly + " " + W + "," + sy(0).toFixed(1) + '"/><polyline fill="none" stroke="' + lineCol + '" stroke-width="2" points="' + poly + '"/></svg>';
+      const kpi = (l, v, c2) => '<div class="k"><span>' + E(l) + '</span><b class="' + (c2 || "") + '">' + E(v) + "</b></div>";
+      let h = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trading snapshot · ' + E(acc.name) + "</title><style>" +
+        "body{margin:0;background:#F4F5FA;color:#1C1D33;font:14px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}.w{max-width:1100px;margin:0 auto;padding:28px 20px 60px}" +
+        "h1{font-size:22px;margin:0}h2{font-size:16px;margin:0 0 12px}.sub{color:#858AA6;font-size:12.5px}.card{background:#fff;border:1px solid #E8E9F1;border-radius:12px;padding:18px 20px;margin-top:16px}" +
+        ".ks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}.k{background:#fff;border:1px solid #E8E9F1;border-radius:12px;padding:14px 16px}.k span{display:block;color:#858AA6;font-size:12px}.k b{font-size:20px}" +
+        ".pos{color:#12B76A}.neg{color:#F04438}table{width:100%;border-collapse:collapse;font-size:12.5px}th{text-align:left;color:#858AA6;font-weight:600;padding:8px 10px;border-bottom:1px solid #E8E9F1;background:#F8F8FC}td{padding:8px 10px;border-bottom:1px solid #E8E9F1;vertical-align:top}td.n,th.n{text-align:right}" +
+        ".cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.cal div{border:1px solid #E8E9F1;border-radius:6px;min-height:46px;padding:4px 6px;font-size:11px}.cal .p{background:rgba(18,183,106,.12)}.cal .l{background:rgba(240,68,56,.10)}.cal .h{border:0;color:#858AA6;text-align:center;min-height:0}" +
+        ".note{white-space:pre-wrap;background:#F8F8FC;border:1px solid #E8E9F1;border-radius:8px;padding:10px 12px;margin-top:6px}.ro{display:inline-block;background:#6C4CF5;color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:8px}" +
+        "@media(max-width:760px){.ks{grid-template-columns:1fr 1fr}}</style></head><body><div class=\"w\">";
+      h += "<h1>" + E(acc.name) + ' <span class="ro">READ ONLY</span></h1><div class="sub">' + E(rangeLabel) + " · " + E(fmtDateOnly(m.sortedTrades[0].closeTime)) + " to " + E(fmtDateOnly(m.sortedTrades[m.sortedTrades.length - 1].closeTime)) + " · generated " + E(new Date().toLocaleString()) + " from TradeSave</div>";
+      h += '<div class="ks">' + kpi("Net P&L", fmtMoney(m.netProfit, 2), cls(m.netProfit)) + kpi("Trades", fmtInt(m.total)) + kpi("Trade win %", fmtPct(m.winRate, 1)) + kpi("Profit factor", fmtNum(m.profitFactor, 2)) +
+        kpi("Day win %", fmtPct(days.length ? dw / days.length : 0, 1)) + kpi("Avg win / loss", fmtMoney(m.avgWin, 2) + " / -" + fmtMoney(m.avgLoss, 2)) + kpi("Max drawdown", fmtMoney(m.maxDD, 2) + " (" + fmtPct(m.maxDDPct, 1) + ")") + kpi("TS Score", fmtNum(score, 1) + " / 100") + "</div>";
+      h += '<div class="card"><h2>Daily net cumulative P&amp;L</h2>' + svg + "</div>";
+      // last 3 months calendar
+      const byKey = new Map(days.map(d => [d.key, d]));
+      const lastKey = days[days.length - 1].key;
+      const mlist = [];
+      for (let i = 0; i < 3; i++) { const d = tzKeyToDate(lastKey.slice(0, 7) + "-01"); d.setMonth(d.getMonth() - i); mlist.push(d); }
+      h += '<div class="card"><h2>Calendar</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">';
+      mlist.reverse().forEach(md => {
+        const y = md.getFullYear(), mo = md.getMonth(), dim = new Date(y, mo + 1, 0).getDate(), off = new Date(y, mo, 1).getDay();
+        let ms = 0;
+        let cells = TZ_DOW.map(x => '<div class="h">' + x + "</div>").join("");
+        for (let i = 0; i < off; i++) cells += '<div style="border:0"></div>';
+        for (let d = 1; d <= dim; d++) {
+          const k = y + (mo + 1 < 10 ? "-0" : "-") + (mo + 1) + (d < 10 ? "-0" : "-") + d, b = byKey.get(k);
+          if (b) ms += b.sum;
+          cells += '<div class="' + (b ? (b.sum > 0 ? "p" : b.sum < 0 ? "l" : "") : "") + '"><div class="sub">' + d + "</div>" + (b ? '<b class="' + cls(b.sum) + '">' + E(fmtMoney(b.sum, 0)) + "</b>" : "") + "</div>";
+        }
+        h += '<div><div style="display:flex;justify-content:space-between"><b>' + TZ_MONTHS[mo] + " " + y + '</b><span class="' + cls(ms) + '">' + E(fmtMoney(ms, 2)) + '</span></div><div class="cal" style="margin-top:8px">' + cells + "</div></div>";
+      });
+      h += "</div></div>";
+      if (store.playbooks.length) {
+        const bySetup = new Map(cachedBucketBy(trades, "setup", x => x.setup || "Unassigned").map(b => [b.key, b]));
+        h += '<div class="card"><h2>Playbooks</h2><table><thead><tr><th>Playbook</th><th>Rules</th><th class="n">Trades</th><th class="n">Win %</th><th class="n">Net P&amp;L</th></tr></thead><tbody>';
+        store.playbooks.forEach(pb => { const b = bySetup.get(pb.name); h += "<tr><td><b>" + E(pb.name) + "</b>" + (pb.description ? '<div class="sub">' + E(pb.description) + "</div>" : "") + "</td><td>" + pb.rules.map(E).join("<br>") + '</td><td class="n">' + (b ? fmtInt(b.total) : 0) + '</td><td class="n">' + (b ? fmtPct(b.wins / b.total, 1) : "—") + '</td><td class="n ' + cls(b ? b.sum : 0) + '">' + E(fmtMoney(b ? b.sum : 0, 2)) + "</td></tr>"; });
+        h += "</tbody></table></div>";
+      }
+      if (o.journal) {
+        const jk = days.map(d => d.key).filter(k => store.journal[k] && store.journal[k].trim()).reverse();
+        if (jk.length) {
+          h += '<div class="card"><h2>Daily journal</h2>';
+          jk.slice(0, 120).forEach(k => { const b = byKey.get(k); h += '<div style="margin-bottom:14px"><b>' + E(tzLongDate(k)) + '</b> <span class="' + cls(b.sum) + '">' + E(fmtMoney(b.sum, 2)) + '</span> <span class="sub">· ' + fmtInt(b.total) + ' trades</span><div class="note">' + E(store.journal[k]) + "</div></div>"; });
+          h += "</div>";
+        }
+      }
+      if (o.trades) {
+        const st = m.sortedTrades, last = st.slice(Math.max(0, st.length - 300)).reverse();
+        h += '<div class="card"><h2>Latest ' + fmtInt(last.length) + " trades" + (st.length > last.length ? ' <span class="sub">of ' + fmtInt(st.length) + "</span>" : "") + '</h2><div style="overflow-x:auto"><table><thead><tr><th>Close</th><th>Symbol</th><th>Side</th><th>Playbook</th>' + (o.tradeNotes ? "<th>Tags / mistakes</th><th>Notes</th>" : "") + '<th class="n">Volume</th><th class="n">Net P&amp;L</th></tr></thead><tbody>';
+        last.forEach(tr => {
+          h += "<tr><td>" + E(fmtDate(tr.closeTime)) + "</td><td>" + E(tr.symbol) + "</td><td>" + E(tr.direction) + "</td><td>" + E(tr.setup || "—") + "</td>" +
+            (o.tradeNotes ? "<td>" + E((tr.tags || []).join(", ")) + ((tr.mistakes || []).length ? '<div class="neg">' + E(tr.mistakes.join(", ")) + "</div>" : "") + "</td><td>" + (tr.note ? '<div style="white-space:pre-wrap;max-width:320px">' + E(tr.note) + "</div>" : "") + "</td>" : "") +
+            '<td class="n">' + E(fmtNum(tr.volume, 2)) + '</td><td class="n ' + cls(tr.netProfit) + '">' + E(fmtMoney(tr.netProfit, 2)) + "</td></tr>";
+        });
+        h += "</tbody></table></div></div>";
+      }
+      if (o.notebook && store.notes.length) {
+        h += '<div class="card"><h2>Notebook</h2>';
+        store.notes.slice().sort((a, b) => b.updatedAt - a.updatedAt).forEach(n => { h += '<div style="margin-bottom:14px"><b>' + E(n.title) + '</b> <span class="sub">' + E(new Date(n.updatedAt).toLocaleDateString()) + '</span><div class="note">' + E(n.body) + "</div></div>"; });
+        h += "</div>";
+      }
+      h += '<div class="sub" style="margin-top:24px;text-align:center">Read-only snapshot. Figures reflect the data at the time it was generated.</div></div></body></html>';
+      return h;
     }
 
     // ---------- wiring ----------
