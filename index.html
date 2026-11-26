@@ -2651,7 +2651,7 @@
         "import.storage": "Storage", "import.storageHint": "Browser IndexedDB · stays on this device",
         "import.noAccount": "Select or create an account first.",
         "import.modalTitle": "Import trades",
-        "import.dropTitle": "Drop .txt / .html / .xlsx file here or click to browse",
+        "import.dropTitle": "Drop .txt / .csv / .html / .xlsx file here or click to browse",
         "mc.simulations": "Number of simulations", "mc.scope": "Scope", "mc.scopeAll": "All trades", "mc.scopeStrategy": "Single playbook",
         "mc.scopeCombo": "Playbook & Symbol", "mc.combo": "Combination", "mc.startBalance": "Starting balance", "mc.tradesToSim": "Trades to simulate", "mc.median": "Median path",
         "mc.params": "Simulation parameters", "mc.overview": "Result overview", "mc.paths": "Simulation paths (median + 5%/95% band)",
@@ -2691,7 +2691,7 @@
         "metric.avgWinLoss": "Avg Win / Avg Loss", "chart.winLoss": "Win / Loss",
         "chart.topBottomSymbols": "Top / Bottom Symbols",
         "corr.strategySymbol": "Strategy & Symbol",
-        "toast.imported": "Trades imported successfully", "toast.importedFile": "File: {file}nNew: {new}  ·  Duplicates: {dup}  ·  Errors: {err}nStored in: IndexedDB · {db}",
+        "toast.imported": "Trades imported successfully", "toast.importedFile": "File: {file}\nNew: {new}  ·  Duplicates: {dup}  ·  Errors: {err}\nStored in: IndexedDB · {db}",
         "toast.accountCreated": "Account created", "toast.accountUpdated": "Account updated", "toast.accountDeleted": "Account deleted",
         "toast.strategyCreated": "Strategy created", "toast.strategyUpdated": "Strategy updated", "toast.strategyDeleted": "Strategy deleted",
         "toast.backupCreated": "Backup downloaded", "toast.backupRestored": "Backup restored",
@@ -2898,7 +2898,29 @@
         r.onerror = () => rej(r.error);
       });
     }
+    // Read a whole store in pages so a large store never blocks the page in one long task
+    async function dbGetAllPaged(store, pageSize) {
+      const out = [];
+      let lastKey;
+      for (;;) {
+        const page = await new Promise((res, rej) => {
+          const os = tx(store).objectStore(store);
+          const range = lastKey === undefined ? undefined : IDBKeyRange.lowerBound(lastKey, true);
+          const r = os.getAll(range, pageSize);
+          r.onsuccess = () => res(r.result || []);
+          r.onerror = () => rej(r.error);
+        });
+        for (let i = 0; i < page.length; i++) out.push(page[i]);
+        if (page.length < pageSize) break;
+        const last = page[page.length - 1];
+        const kp = tx(store).objectStore(store).keyPath;
+        lastKey = Array.isArray(kp) ? kp.map(k => last[k]) : last[kp];
+        await new Promise(r => setTimeout(r, 0));
+      }
+      return out;
+    }
     function dbPut(store, value) {
+      if (store === "trades") { invalidateTradeCache(); noteImportTouched(value); }
       return new Promise((res, rej) => {
         const r = tx(store, "readwrite").objectStore(store).put(value);
         r.onsuccess = () => res(r.result);
@@ -2906,6 +2928,7 @@
       });
     }
     function dbDel(store, key) {
+      if (store === "trades") invalidateTradeCache();
       return new Promise((res, rej) => {
         const r = tx(store, "readwrite").objectStore(store).delete(key);
         r.onsuccess = () => res();
@@ -2913,6 +2936,7 @@
       });
     }
     function dbBulkPut(store, values) {
+      if (store === "trades") { invalidateTradeCache(); noteImportTouched(values); }
       return new Promise((res, rej) => {
         const transaction = tx(store, "readwrite");
         const s = transaction.objectStore(store);
@@ -2922,10 +2946,21 @@
       });
     }
     async function dbClear(store) {
+      if (store === "trades") invalidateTradeCache();
       return new Promise((res, rej) => {
         const r = tx(store, "readwrite").objectStore(store).clear();
         r.onsuccess = () => res();
         r.onerror = () => rej(r.error);
+      });
+    }
+    // Delete every trade of one account in a single range delete (keyPath is [accountId, ticket])
+    function dbDeleteAccountTrades(accountId) {
+      invalidateTradeCache();
+      return new Promise((res, rej) => {
+        const transaction = tx("trades", "readwrite");
+        transaction.objectStore("trades").delete(IDBKeyRange.bound([accountId], [accountId, []]));
+        transaction.oncomplete = () => res();
+        transaction.onerror = () => rej(transaction.error);
       });
     }
     async function setMeta(key, value) {
@@ -3082,7 +3117,7 @@
     }
     function parseFloatSafe(v) {
       if (v === null || v === undefined) return 0;
-      const s = String(v).trim().replace(",", ".").replace(/ /g, "");
+      const s = String(v).trim().replace(",", ".").replace(/[ \u00A0]/g, "");
       if (!s) return 0;
       const n = parseFloat(s);
       return isNaN(n) ? 0 : n;
@@ -3145,19 +3180,239 @@
       return { trades, errors };
     }
 
+    // === MT5 Balance / Equity CSV parsing (Strategy Tester graph export) ===
+    // Format: UTF-16 LE, tab-separated, header "<DATE> <BALANCE> <EQUITY> <DEPOSIT LOAD>".
+    // The file holds no deals, so trades are derived from balance changes:
+    // each balance change is one closed result. A small negative amount that repeats
+    // (entry commission) is folded into the next close as commission, and its time is
+    // used as the open time. Symbol, direction, volume and prices are not in the file.
+    function isBalanceEquityCSV(text) {
+      const head = String(text || "").replace(/^﻿/, "").slice(0, 400).toUpperCase();
+      return head.includes("<DATE>") && head.includes("<BALANCE>");
+    }
+
+    function hashText(s) {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+      return (h >>> 0).toString(36);
+    }
+
+    function parseBalanceEquityCSV(text) {
+      const clean = String(text || "").replace(/^﻿/, "");
+      const lines = clean.split(/\r?\n/);
+      const errors = [];
+      let headerIdx = lines.findIndex(l => l.toUpperCase().includes("<BALANCE>"));
+      if (headerIdx < 0) return { trades: [], errors: [{ line: 0, raw: "", reason: "Balance/Equity header not found" }], startingBalance: 0 };
+      const headerLine = lines[headerIdx];
+      const delim = headerLine.includes("\t") ? "\t" : (headerLine.includes(";") ? ";" : ",");
+      const cols = headerLine.split(delim).map(c => c.trim().toUpperCase().replace(/[<>]/g, ""));
+      const iDate = cols.indexOf("DATE");
+      const iBal = cols.indexOf("BALANCE");
+      const iEq = cols.indexOf("EQUITY");
+      const iLoad = cols.findIndex(c => c.startsWith("DEPOSIT"));
+      if (iDate < 0 || iBal < 0) return { trades: [], errors: [{ line: headerIdx + 1, raw: headerLine, reason: "DATE or BALANCE column missing" }], startingBalance: 0 };
+
+      const points = [];
+      for (let li = headerIdx + 1; li < lines.length; li++) {
+        const line = lines[li].trim();
+        if (!line) continue;
+        const f = line.split(delim);
+        const time = parseDateTime(f[iDate]);
+        if (!time) { errors.push({ line: li + 1, raw: line, reason: "Invalid date: " + f[iDate] }); continue; }
+        points.push({
+          time,
+          balance: parseFloatSafe(f[iBal]),
+          equity: iEq >= 0 ? parseFloatSafe(f[iEq]) : parseFloatSafe(f[iBal]),
+          load: iLoad >= 0 ? parseFloatSafe(f[iLoad]) : 0,
+        });
+      }
+      if (points.length < 2) {
+        errors.push({ line: 0, raw: "", reason: "Not enough Balance/Equity rows" });
+        return { trades: [], errors, startingBalance: points.length ? points[0].balance : 0 };
+      }
+
+      // Balance changes, rounded to cents to avoid float noise
+      const deltas = [];
+      for (let i = 1; i < points.length; i++) {
+        const d = Math.round((points[i].balance - points[i - 1].balance) * 100) / 100;
+        if (d !== 0) deltas.push({ time: points[i].time, delta: d });
+      }
+
+      // Entry commission = most frequent negative change, if it is small and frequent
+      let commissionValue = null;
+      const negCount = new Map();
+      for (const d of deltas) if (d.delta < 0) negCount.set(d.delta, (negCount.get(d.delta) || 0) + 1);
+      let best = null, bestN = 0;
+      for (const [v, n] of negCount) if (n > bestN) { best = v; bestN = n; }
+      if (best !== null && deltas.length) {
+        const absSorted = deltas.map(d => Math.abs(d.delta)).sort((a, b) => a - b);
+        const medianAbs = absSorted[Math.floor(absSorted.length / 2)];
+        if (bestN >= 10 && bestN >= deltas.length * 0.1 && Math.abs(best) < medianAbs * 0.5) commissionValue = best;
+      }
+
+      const fileId = hashText(clean);
+      const trades = [];
+      let seq = 0;
+      let pendingComm = 0;
+      let pendingOpen = null;
+      let lastEventTime = points[0].time;
+      const pushTrade = (openTime, closeTime, profit, commission) => {
+        seq++;
+        trades.push({
+          ticket: "BE-" + fileId + "-" + seq,
+          symbol: "N/A",
+          volume: 0,
+          direction: "Long", // placeholder: direction is not in this file
+          openPrice: 0, closePrice: 0,
+          openTime, closeTime,
+          commission, swap: 0, profit,
+          stopLoss: 0, takeProfit: 0,
+          magicNumber: "",
+          comment: "MT5 Balance/Equity CSV",
+          strategyId: null,
+          netProfit: Math.round((profit + commission) * 100) / 100,
+        });
+      };
+      for (const d of deltas) {
+        if (commissionValue !== null && d.delta === commissionValue) {
+          pendingComm = Math.round((pendingComm + d.delta) * 100) / 100;
+          if (pendingOpen === null) pendingOpen = d.time;
+          continue;
+        }
+        pushTrade(pendingOpen !== null ? pendingOpen : lastEventTime, d.time, d.delta, pendingComm);
+        pendingComm = 0;
+        pendingOpen = null;
+        lastEventTime = d.time;
+      }
+      // Commission with no close after it: keep it so totals match the file
+      if (pendingComm !== 0) pushTrade(pendingOpen, pendingOpen, 0, pendingComm);
+
+      // Equity stats (floating drawdown is only visible in this export)
+      let peakEq = points[0].equity, maxDD = 0, maxDDPct = 0, maxLoad = 0;
+      for (const p of points) {
+        if (p.equity > peakEq) peakEq = p.equity;
+        const dd = peakEq - p.equity;
+        if (dd > maxDD) { maxDD = dd; maxDDPct = peakEq ? (dd / peakEq) * 100 : 0; }
+        if (p.load > maxLoad) maxLoad = p.load;
+      }
+
+      if (!trades.length && !errors.length) errors.push({ line: 0, raw: "", reason: "No balance changes found" });
+      return {
+        trades, errors,
+        startingBalance: points[0].balance,
+        equityStats: {
+          points: points.length,
+          startBalance: points[0].balance,
+          endBalance: points[points.length - 1].balance,
+          maxEquityDD: Math.round(maxDD * 100) / 100,
+          maxEquityDDPct: Math.round(maxDDPct * 100) / 100,
+          maxDepositLoad: maxLoad,
+          commissionPerEntry: commissionValue,
+        },
+      };
+    }
+
+    function decodeTextBuffer(buf) {
+      const bytes = new Uint8Array(buf);
+      if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder("utf-16le").decode(buf);
+      if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder("utf-16be").decode(buf);
+      // UTF-16 LE without BOM: every second byte is zero in ASCII text
+      if (bytes.length > 3 && bytes[1] === 0 && bytes[3] === 0) return new TextDecoder("utf-16le").decode(buf);
+      return new TextDecoder("utf-8").decode(buf);
+    }
+
+    // Header -> field. Exact alias wins, then the longest alias contained in the header.
+    // (First-match-wins made "Open Time" map to openPrice via the "open" alias.)
+    function matchColumnAlias(text, aliasMap) {
+      const lower = text.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
+      if (!lower) return null;
+      let bestKey = null, bestScore = 0;
+      for (const key in aliasMap) {
+        for (const a of aliasMap[key]) {
+          let sc = 0;
+          if (lower === a) sc = 1000;
+          else if (lower.includes(a)) sc = a.length;
+          else if (a.includes(lower)) sc = lower.length * 0.5;
+          if (sc > bestScore) { bestScore = sc; bestKey = key; }
+        }
+      }
+      return bestKey;
+    }
+
+    // === HTML table extraction (text-based, works in a Web Worker; no DOMParser) ===
+    // Returns tables -> rows -> { all: [td+th texts], td: [td texts] }, matching what
+    // querySelectorAll("td, th") / ("td") + textContent produced in the old DOM-based parsers.
+    function decodeHTMLEntities(s) {
+      if (s.indexOf("&") < 0) return s;
+      return s.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, function (m, e) {
+        if (e[0] === "#") {
+          const code = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+          return isFinite(code) ? String.fromCodePoint(code) : m;
+        }
+        switch (e.toLowerCase()) {
+          case "nbsp": return " ";
+          case "amp": return "&";
+          case "lt": return "<";
+          case "gt": return ">";
+          case "quot": return "\"";
+          case "apos": return "'";
+          default: return m;
+        }
+      });
+    }
+    function extractHTMLTables(html) {
+      const tables = [];
+      const stack = [];
+      let row = null, cellStart = -1, cellIsTh = false;
+      const tagRe = /<(\/?)(table|tr|td|th)\b[^>]*>|<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\3\s*>/gi;
+      const cellText = (from, to) => decodeHTMLEntities(html.slice(from, to).replace(/<[^>]*>/g, ""));
+      function closeCell(at) {
+        if (cellStart < 0 || !row) { cellStart = -1; return; }
+        const txt = cellText(cellStart, at);
+        row.all.push(txt);
+        if (!cellIsTh) row.td.push(txt);
+        cellStart = -1;
+      }
+      function closeRow(at) {
+        closeCell(at);
+        if (row && stack.length) stack[stack.length - 1].push(row);
+        row = null;
+      }
+      let m;
+      while ((m = tagRe.exec(html))) {
+        if (!m[2]) continue; // comment / script / style: skipped
+        const closing = m[1] === "/";
+        const tag = m[2].toLowerCase();
+        const at = m.index;
+        if (tag === "table") {
+          if (!closing) { closeRow(at); const tbl = []; tables.push(tbl); stack.push(tbl); }
+          else { closeRow(at); stack.pop(); }
+        } else if (tag === "tr") {
+          closeRow(at);
+          if (!closing && stack.length) row = { all: [], td: [] };
+        } else { // td / th
+          if (!closing) {
+            closeCell(at);
+            if (!row && stack.length) row = { all: [], td: [] }; // tolerate missing <tr>
+            if (row) { cellStart = at + m[0].length; cellIsTh = tag === "th"; }
+          } else {
+            closeCell(at);
+          }
+        }
+      }
+      closeRow(html.length);
+      return tables;
+    }
+
     // === HTML trade report parsing (MT5 Account History HTML export) ===
-    function parseHTMLTradeReport(htmlText) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlText, "text/html");
-      const tables = doc.querySelectorAll("table");
+    function parseHTMLTradeReport(tables) {
       if (!tables.length) return { trades: [], errors: [{ line: 0, raw: "", reason: "No table found in HTML" }] };
       let bestTable = tables[0];
       let bestRows = 0;
       for (const tbl of tables) {
-        const rows = tbl.querySelectorAll("tr");
-        if (rows.length > bestRows) { bestTable = tbl; bestRows = rows.length; }
+        if (tbl.length > bestRows) { bestTable = tbl; bestRows = tbl.length; }
       }
-      const rows = bestTable.querySelectorAll("tr");
+      const rows = bestTable;
       const trades = [];
       const errors = [];
       let headerMap = null;
@@ -3179,15 +3434,10 @@
         comment: ["comment", "note", "notes", "description", "remarks"],
       };
       function matchColumn(text) {
-        const lower = text.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/s+/g, " ").trim();
-        for (const [key, aliases] of Object.entries(COL_ALIASES)) {
-          if (aliases.some(a => lower.includes(a) || a.includes(lower))) return key;
-        }
-        return null;
+        return matchColumnAlias(String(text), COL_ALIASES);
       }
       for (let ri = 0; ri < rows.length; ri++) {
-        const cells = rows[ri].querySelectorAll("td, th");
-        const cellTexts = Array.from(cells).map(c => c.textContent.trim());
+        const cellTexts = rows[ri].all.map(c => c.trim());
         if (!cellTexts.length || cellTexts.every(t => !t)) continue;
         if (!headerMap) {
           const mapped = cellTexts.map(matchColumn);
@@ -3241,15 +3491,12 @@
     }
 
     // === MT5 Trade History Report parsing (Account History HTML export) ===
-    function parseMT5TradeHistoryReport(htmlText) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlText, "text/html");
-      const tables = doc.querySelectorAll("table");
+    function parseMT5TradeHistoryReport(tables) {
       if (!tables.length) return { trades: [], errors: [{ line: 0, raw: "", reason: "No table found" }] };
-      const rows = tables[0].querySelectorAll("tr");
+      const rows = tables[0];
       let headerRow = -1;
       for (let ri = 0; ri < rows.length; ri++) {
-        const texts = Array.from(rows[ri].querySelectorAll("td, th")).map(c => c.textContent.trim().toLowerCase());
+        const texts = rows[ri].all.map(c => c.trim().toLowerCase());
         if (texts.some(t => t === "positions") || texts.some(t => t === "trade history report")) {
           headerRow = ri + 1;
           break;
@@ -3261,9 +3508,9 @@
       const trades = [];
       const errors = [];
       for (let ri = headerRow + 1; ri < rows.length; ri++) {
-        const cells = rows[ri].querySelectorAll("td");
+        const cells = rows[ri].td;
         if (cells.length < 5) continue;
-        const cellTexts = Array.from(cells).map(c => c.textContent.trim());
+        const cellTexts = cells.map(c => c.trim());
         // MT5 Trade History Report columns:
         // [0]=open time, [1]=ticket, [2]=symbol, [3]=type, [4]=hidden(colspan=8),
         // [5]=volume, [6]=open price, [7]=S/L, [8]=T/P, [9]=close time,
@@ -3275,12 +3522,12 @@
           errors.push({ line: ri + 1, raw: cellTexts.join(" | "), reason: "Invalid direction: " + cellTexts[3] });
           continue;
         }
-        const openTime = parseDateTime(cellTexts[0]);
+        let openTime = parseDateTime(cellTexts[0]);
         if (!openTime) {
           errors.push({ line: ri + 1, raw: cellTexts.join(" | "), reason: "Invalid open date: " + cellTexts[0] });
           continue;
         }
-        const closeTime = parseDateTime(cellTexts[9]);
+        let closeTime = parseDateTime(cellTexts[9]);
         if (!closeTime) {
           errors.push({ line: ri + 1, raw: cellTexts.join(" | "), reason: "Invalid close date" });
           continue;
@@ -3297,7 +3544,7 @@
           [openTime, closeTime] = [closeTime, openTime];
           [openPrice, closePrice] = [closePrice, openPrice];
         }
-        const trade = {
+        trades.push({
           ticket: ticket,
           symbol: cellTexts[2] || "",
           volume: volume,
@@ -3315,8 +3562,7 @@
           comment: "",
           strategyId: null,
           netProfit: profit + commission + swap,
-        };
-        trades.push(trade);
+        });
       }
       if (trades.length === 0 && errors.length === 0) {
         errors.push({ line: 0, raw: "", reason: "No trades found in Trade History report" });
@@ -3325,29 +3571,23 @@
     }
 
     // === Strategy Tester HTML report parsing (MT5 export) ===
-    function parseStrategyTesterHTMLReport(htmlText) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlText, "text/html");
-      const allTables = doc.querySelectorAll("table");
-      if (allTables.length < 2) return { trades: [], errors: [{ line: 0, raw: "", reason: "Expected at least 2 tables in Strategy Tester report" }] };
-      const tables = Array.from(allTables);
+    function parseStrategyTesterHTMLReport(tables) {
+      if (tables.length < 2) return { trades: [], errors: [{ line: 0, raw: "", reason: "Expected at least 2 tables in Strategy Tester report" }] };
       // Use the largest table (Table 1 = Orders + Deals combined)
       let bestTable = tables[0];
       let bestSize = 0;
       for (const t of tables) {
-        const s = t.querySelectorAll("tr").length;
-        if (s > bestSize) { bestTable = t; bestSize = s; }
+        if (t.length > bestSize) { bestTable = t; bestSize = t.length; }
       }
-      const rows = bestTable.querySelectorAll("tr");
+      const rows = bestTable;
       const trades = [];
       const errors = [];
       // Find the Deals section header
       let dealsHeaderRow = -1;
-      const rowData = [];
+      const rowData = new Array(rows.length);
       for (let ri = 0; ri < rows.length; ri++) {
-        const cells = rows[ri].querySelectorAll("td, th");
-        const texts = Array.from(cells).map(c => c.textContent.trim().toLowerCase());
-        rowData.push(texts);
+        const texts = rows[ri].all.map(c => c.trim().toLowerCase());
+        rowData[ri] = texts;
         if (texts.some(t => t === "deals") && texts.every(t => t === "" || t === "deals")) {
           dealsHeaderRow = ri;
         }
@@ -3399,7 +3639,8 @@
           continue;
         }
         const dir = (colMap.direction !== undefined && texts[colMap.direction] || "").toLowerCase();
-        const deal = {
+        if (dir !== "in" && dir !== "out") continue;
+        deals.push({
           time: colMap.time !== undefined ? texts[colMap.time] : "",
           symbol: colMap.symbol !== undefined ? texts[colMap.symbol] : "",
           type: type,
@@ -3412,74 +3653,88 @@
           profit: colMap.profit !== undefined ? parseFloatSafe(texts[colMap.profit]) : 0,
           comment: colMap.comment !== undefined ? texts[colMap.comment] : "",
           row: ri + 1,
-        };
-        if (dir === "in" || dir === "out") {
-          deals.push(deal);
-        }
+        });
       }
-      // Pair "in" and "out" deals to form complete trades
-      const pendingIns = [];
-      for (const d of deals) {
-        if (d.direction === "in") {
-          pendingIns.push(d);
-        } else if (d.direction === "out" && pendingIns.length > 0) {
-          // Match with the first pending "in" for the same symbol
-          let matchIdx = -1;
-          for (let i = 0; i < pendingIns.length; i++) {
-            if (pendingIns[i].symbol === d.symbol) { matchIdx = i; break; }
-          }
-          if (matchIdx < 0) {
-            // Fallback: match any pending in
-            matchIdx = 0;
-          }
-          const openDeal = pendingIns.splice(matchIdx, 1)[0];
-          const openTime = parseDateTime(openDeal.time);
-          const closeTime = parseDateTime(d.time);
-          const direction = parseDirection(openDeal.type);
-          if (!direction) {
-            errors.push({ line: d.row, raw: `${openDeal.time} | ${d.time}`, reason: "Invalid direction from type: " + openDeal.type });
-            continue;
-          }
-          if (!openTime || !closeTime) {
-            errors.push({ line: d.row, raw: `${openDeal.time} | ${d.time}`, reason: "Invalid date(s)" });
-            continue;
-          }
-          const trade = {
-            ticket: d.order || openDeal.order,
-            symbol: d.symbol,
-            volume: openDeal.volume,
-            direction,
-            openPrice: openDeal.price,
-            closePrice: d.price,
-            openTime,
-            closeTime,
-            commission: openDeal.commission + d.commission,
-            swap: openDeal.swap + d.swap,
-            profit: d.profit,
-            stopLoss: 0,
-            takeProfit: 0,
-            magicNumber: "",
-            comment: d.comment || openDeal.comment,
-            strategyId: null,
-            netProfit: d.profit + openDeal.commission + d.commission + openDeal.swap + d.swap,
-          };
-          trades.push(trade);
-        }
-      }
+      pairDealsIntoTrades(deals, trades, errors);
       if (trades.length === 0 && errors.length === 0) {
         errors.push({ line: 0, raw: "", reason: "No trade pairs (in/out) found in Strategy Tester report" });
       }
       return { trades, errors, startingBalance };
     }
 
+    // Pair "in" and "out" deals into trades. Same matching rule as before (first pending "in"
+    // with the same symbol, else the oldest pending "in"), but pending ins are kept per symbol
+    // so large reports do not rescan and splice one big array for every "out".
+    function pairDealsIntoTrades(deals, trades, errors) {
+      const bySymbol = new Map();   // symbol -> array of pending ins (FIFO, with head index)
+      const allPending = [];        // global FIFO for the fallback match
+      let allHead = 0;
+      let pendingCount = 0;
+      for (const d of deals) {
+        if (d.direction === "in") {
+          d._used = false;
+          let q = bySymbol.get(d.symbol);
+          if (!q) { q = { list: [], head: 0 }; bySymbol.set(d.symbol, q); }
+          q.list.push(d);
+          allPending.push(d);
+          pendingCount++;
+          continue;
+        }
+        if (d.direction !== "out" || pendingCount === 0) continue;
+        let openDeal = null;
+        const q = bySymbol.get(d.symbol);
+        if (q) {
+          while (q.head < q.list.length && q.list[q.head]._used) q.head++;
+          if (q.head < q.list.length) openDeal = q.list[q.head++];
+        }
+        if (!openDeal) {
+          while (allHead < allPending.length && allPending[allHead]._used) allHead++;
+          openDeal = allPending[allHead++];
+        }
+        openDeal._used = true;
+        pendingCount--;
+        const openTime = parseDateTime(openDeal.time);
+        const closeTime = parseDateTime(d.time);
+        const direction = parseDirection(openDeal.type);
+        if (!direction) {
+          errors.push({ line: d.row, raw: `${openDeal.time} | ${d.time}`, reason: "Invalid direction from type: " + openDeal.type });
+          continue;
+        }
+        if (!openTime || !closeTime) {
+          errors.push({ line: d.row, raw: `${openDeal.time} | ${d.time}`, reason: "Invalid date(s)" });
+          continue;
+        }
+        trades.push({
+          ticket: d.order || openDeal.order,
+          symbol: d.symbol,
+          volume: openDeal.volume,
+          direction,
+          openPrice: openDeal.price,
+          closePrice: d.price,
+          openTime,
+          closeTime,
+          commission: openDeal.commission + d.commission,
+          swap: openDeal.swap + d.swap,
+          profit: d.profit,
+          stopLoss: 0,
+          takeProfit: 0,
+          magicNumber: "",
+          comment: d.comment || openDeal.comment,
+          strategyId: null,
+          netProfit: d.profit + openDeal.commission + d.commission + openDeal.swap + d.swap,
+        });
+      }
+    }
+
     // === XLSX trade parsing (MT5 Excel export) ===
+    const SHEETJS_URL = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js";
     let _sheetJSPromise = null;
     function loadSheetJS() {
       if (typeof XLSX !== "undefined") return Promise.resolve();
       if (!_sheetJSPromise) {
         _sheetJSPromise = new Promise((res, rej) => {
           const s = document.createElement("script");
-          s.src = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js";
+          s.src = SHEETJS_URL;
           s.onload = () => { res(); };
           s.onerror = () => rej(new Error("Failed to load SheetJS"));
           document.head.appendChild(s);
@@ -3493,16 +3748,15 @@
       // Excel epoch is Jan 1, 1900 (with the known Feb 29, 1900 bug)
       const epoch = new Date(Date.UTC(1899, 11, 30));
       const ms = epoch.getTime() + serial * 86400000;
+      const d = new Date(ms);
+      // Excel stores local wall-clock time; rebuild it as local time
+      const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds());
+      return isNaN(local.getTime()) ? null : local.getTime();
     }
 
     // === MT5 Trade History Report XLSX parsing ===
-    function parseMT5TradeHistoryXLSX(workbook) {
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return { trades: [], errors: [{ line: 0, raw: "", reason: "No sheets found in workbook" }] };
-      }
-      const sheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+    // data = first sheet as rows (XLSX.utils.sheet_to_json header:1), converted once by the caller
+    function parseMT5TradeHistoryXLSX(data) {
       if (!data || data.length < 9) {
         return { trades: [], errors: [{ line: 0, raw: "", reason: "Not enough rows in workbook" }] };
       }
@@ -3522,12 +3776,12 @@
           errors.push({ line: ri + 1, raw: row.join(" | "), reason: "Invalid direction: " + row[3] });
           continue;
         }
-        const openTime = parseDateTime(String(row[0] ?? "").trim());
+        let openTime = parseDateTime(String(row[0] ?? "").trim());
         if (!openTime) {
           errors.push({ line: ri + 1, raw: row.join(" | "), reason: "Invalid open date: " + row[0] });
           continue;
         }
-        const closeTime = parseDateTime(String(row[8] ?? "").trim());
+        let closeTime = parseDateTime(String(row[8] ?? "").trim());
         if (!closeTime) {
           errors.push({ line: ri + 1, raw: row.join(" | "), reason: "Invalid close date" });
           continue;
@@ -3572,13 +3826,7 @@
     }
 
     // === MT5 Strategy Tester Report XLSX parsing ===
-    function parseStrategyTesterXLSX(workbook) {
-      var sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return { trades: [], errors: [{ line: 0, raw: "", reason: "No sheets found" }], startingBalance: 0 };
-      }
-      var sheet = workbook.Sheets[sheetName];
-      var data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+    function parseStrategyTesterXLSX(data) {
       if (!data || data.length < 5) {
         return { trades: [], errors: [{ line: 0, raw: "", reason: "Not enough rows" }], startingBalance: 0 };
       }
@@ -3639,54 +3887,9 @@
         });
       }
 
-      // Pair "in" and "out" deals to form complete trades
       var trades = [];
       var errors = [];
-      var pendingIns = [];
-      for (var di = 0; di < allDeals.length; di++) {
-        var d = allDeals[di];
-        if (d.direction === "in") {
-          pendingIns.push(d);
-        } else if (d.direction === "out" && pendingIns.length > 0) {
-          // Match with the first pending "in" for the same symbol
-          var matchIdx = -1;
-          for (var pi = 0; pi < pendingIns.length; pi++) {
-            if (pendingIns[pi].symbol === d.symbol) { matchIdx = pi; break; }
-          }
-          if (matchIdx < 0) matchIdx = 0;
-          var openDeal = pendingIns.splice(matchIdx, 1)[0];
-          var openTime = parseDateTime(openDeal.time);
-          var closeTime = parseDateTime(d.time);
-          var direction = parseDirection(openDeal.type);
-          if (!direction) {
-            errors.push({ line: d.row, raw: openDeal.time + " | " + d.time, reason: "Invalid direction from type: " + openDeal.type });
-            continue;
-          }
-          if (!openTime || !closeTime) {
-            errors.push({ line: d.row, raw: openDeal.time + " | " + d.time, reason: "Invalid date(s)" });
-            continue;
-          }
-          trades.push({
-            ticket: d.order || openDeal.order,
-            symbol: d.symbol,
-            volume: openDeal.volume,
-            direction: direction,
-            openPrice: openDeal.price,
-            closePrice: d.price,
-            openTime: openTime,
-            closeTime: closeTime,
-            commission: openDeal.commission + d.commission,
-            swap: openDeal.swap + d.swap,
-            profit: d.profit,
-            stopLoss: 0,
-            takeProfit: 0,
-            magicNumber: "",
-            comment: d.comment || openDeal.comment,
-            strategyId: null,
-            netProfit: d.profit + openDeal.commission + d.commission + openDeal.swap + d.swap,
-          });
-        }
-      }
+      pairDealsIntoTrades(allDeals, trades, errors);
 
       if (trades.length === 0 && errors.length === 0) {
         errors.push({ line: 0, raw: "", reason: "No trade pairs (in/out) found in Strategy Tester XLSX report" });
@@ -3694,13 +3897,7 @@
       return { trades: trades, errors: errors, startingBalance: startingBalance };
     }
 
-    function parseXLSXTrades(workbook) {
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return { trades: [], errors: [{ line: 0, raw: "", reason: "No sheets found in workbook" }] };
-      }
-      const sheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+    function parseXLSXTrades(data) {
       if (!data || data.length < 2) {
         return { trades: [], errors: [{ line: 0, raw: "", reason: "Not enough rows in sheet" }] };
       }
@@ -3713,7 +3910,7 @@
       if (maxCols <= 2 && hasSemicolons) {
         // Single-column semicolon format — reconstruct text and use the existing parser
         const lines = data.map(row => String(row && row[0] !== undefined ? row[0] : "").trim()).filter(l => l.length > 0);
-        const text = lines.join("n");
+        const text = lines.join("\n");
         return parseTradeFile(text);
       }
 
@@ -3738,11 +3935,7 @@
         comment: ["comment", "note", "notes", "description", "remarks"],
       };
       function matchColumn(text) {
-        const lower = String(text).toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/s+/g, " ").trim();
-        for (const [key, aliases] of Object.entries(COL_ALIASES)) {
-          if (aliases.some(a => lower.includes(a) || a.includes(lower))) return key;
-        }
-        return null;
+        return matchColumnAlias(String(text), COL_ALIASES);
       }
       let headerMap = null;
       let startRow = 0;
@@ -3856,140 +4049,391 @@
       return changed;
     }
 
+    // === Import pipeline ===
+    // Parsing, de-duplication and the IndexedDB write run in a Web Worker so the UI never
+    // freezes. Trades come back in chunks; the main thread only appends them to state.
+    // If a Worker cannot be created (old browser, strict CSP), the same functions run on the
+    // main thread with the write split into chunks.
+    const IMPORT_CHUNK = 5000;
+    const MAX_IMPORT_ERRORS_LOGGED = 200;
+
+    async function parseImportBuffer(buf, name, ensureXLSX) {
+      const lname = String(name || "").toLowerCase();
+      let result, kind;
+      if (lname.endsWith(".xlsx")) {
+        await ensureXLSX();
+        const workbook = XLSX.read(buf, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) return { kind: "xlsx", trades: [], errors: [{ line: 0, raw: "", reason: "No sheets found in workbook" }] };
+        const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "", raw: true });
+        const firstRows = data.slice(0, 10).map(function (r) { return String((r && r[0]) || ""); }).join(" ").toLowerCase();
+        if (firstRows.includes("trade history report")) { kind = "xlsx-history"; result = parseMT5TradeHistoryXLSX(data); }
+        else if (firstRows.includes("strategy tester report")) { kind = "xlsx-tester"; result = parseStrategyTesterXLSX(data); }
+        else { kind = "xlsx"; result = parseXLSXTrades(data); }
+      } else {
+        const text = decodeTextBuffer(buf);
+        if (lname.endsWith(".html") || lname.endsWith(".htm")) {
+          const tables = extractHTMLTables(text);
+          if (/strategy tester report/i.test(text)) { kind = "html-tester"; result = parseStrategyTesterHTMLReport(tables); }
+          else if (/trade history report/i.test(text)) { kind = "html-history"; result = parseMT5TradeHistoryReport(tables); }
+          else { kind = "html"; result = parseHTMLTradeReport(tables); }
+        } else if (isBalanceEquityCSV(text)) {
+          kind = "balance-csv"; result = parseBalanceEquityCSV(text);
+        } else {
+          kind = "text"; result = parseTradeFile(text);
+        }
+      }
+      result.kind = kind;
+      result.setsStartingBalance = kind === "html-tester" || kind === "xlsx-tester" || kind === "balance-csv";
+      return result;
+    }
+
+    // Drop tickets that already exist (any account, same rule as before) and auto-assign
+    // strategies by magic number (first strategy that lists the magic wins).
+    function dedupeAndAssign(parsed, existingTickets, accountId, strategies) {
+      const existing = new Set(existingTickets);
+      const byMagic = new Map();
+      for (const st of strategies || []) {
+        for (const mg of st.magicNumbers || []) if (!byMagic.has(mg)) byMagic.set(mg, st.id);
+      }
+      const fresh = [];
+      let duplicates = 0;
+      for (const tr of parsed) {
+        if (existing.has(tr.ticket)) { duplicates++; continue; }
+        const rec = Object.assign({ accountId: accountId }, tr);
+        if (!rec.strategyId && byMagic.has(rec.magicNumber)) rec.strategyId = byMagic.get(rec.magicNumber);
+        fresh.push(rec);
+        existing.add(tr.ticket);
+      }
+      return { fresh: fresh, duplicates: duplicates };
+    }
+
+    function idbOpen(name) {
+      return new Promise(function (res, rej) {
+        const r = indexedDB.open(name);
+        r.onupgradeneeded = function () { r.transaction.abort(); };
+        r.onsuccess = function () {
+          const db = r.result;
+          if (!db.objectStoreNames.contains("trades")) { db.close(); rej(new Error("trades store missing")); }
+          else res(db);
+        };
+        r.onerror = function () { rej(r.error); };
+        r.onblocked = function () { rej(new Error("DB open blocked")); };
+      });
+    }
+    function idbPutAll(db, store, values) {
+      return new Promise(function (res, rej) {
+        const tx = db.transaction(store, "readwrite");
+        const os = tx.objectStore(store);
+        for (let i = 0; i < values.length; i++) os.put(values[i]);
+        tx.oncomplete = function () { res(); };
+        tx.onerror = function () { rej(tx.error); };
+        tx.onabort = function () { rej(tx.error || new Error("Transaction aborted")); };
+      });
+    }
+
+    // Runs inside the worker. Only references functions listed in IMPORT_WORKER_FUNCS.
+    // Protocol: progress* -> data* (all trades, in chunks) -> parsed (summary)
+    //           -> saved* | saveFailed(from) -> done
+    function importWorkerMain() {
+      self.onmessage = async function (e) {
+        const job = e.data;
+        I18N_W = job.i18n || {};
+        const post = function (m) { self.postMessage(m); };
+        try {
+          post({ type: "progress", stage: "parse" });
+          const res = await parseImportBuffer(job.buf, job.name, async function () {
+            if (typeof XLSX === "undefined") importScripts(job.xlsxUrl);
+          });
+          post({ type: "progress", stage: "dedupe", parsed: res.trades.length });
+          const dd = dedupeAndAssign(res.trades, job.existing, job.accountId, job.strategies);
+          res.trades = null;
+          const fresh = dd.fresh;
+          for (let i = 0; i < fresh.length; i += job.chunk) {
+            post({ type: "data", trades: fresh.slice(i, i + job.chunk), done: Math.min(i + job.chunk, fresh.length), total: fresh.length });
+          }
+          post({
+            type: "parsed", kind: res.kind,
+            errors: res.errors.slice(0, job.maxErrors), errorCount: res.errors.length,
+            duplicates: dd.duplicates, total: fresh.length,
+            startingBalance: res.startingBalance || 0, setsStartingBalance: !!res.setsStartingBalance,
+            equityStats: res.equityStats || null,
+          });
+          let db = null;
+          if (fresh.length && job.dbName && typeof indexedDB !== "undefined") {
+            try { db = await idbOpen(job.dbName); } catch (_) { db = null; }
+          }
+          if (fresh.length && !db) post({ type: "saveFailed", from: 0 });
+          else if (db) {
+            for (let i = 0; i < fresh.length; i += job.chunk) {
+              try { await idbPutAll(db, "trades", fresh.slice(i, i + job.chunk)); }
+              catch (_) { post({ type: "saveFailed", from: i }); break; }
+              post({ type: "saved", done: Math.min(i + job.chunk, fresh.length), total: fresh.length });
+            }
+            db.close();
+          }
+          post({ type: "done" });
+        } catch (err) {
+          post({ type: "error", message: String((err && err.message) || err) });
+        }
+      };
+    }
+
+    const IMPORT_WORKER_FUNCS = [
+      parseDirection, parseDateTime, parseFloatSafe, parseTradeFile,
+      matchColumnAlias, decodeHTMLEntities, extractHTMLTables, parseHTMLTradeReport, parseMT5TradeHistoryReport,
+      parseStrategyTesterHTMLReport, pairDealsIntoTrades,
+      excelSerialToDate, parseMT5TradeHistoryXLSX, parseStrategyTesterXLSX, parseXLSXTrades,
+      isBalanceEquityCSV, hashText, parseBalanceEquityCSV, decodeTextBuffer,
+      parseImportBuffer, dedupeAndAssign, idbOpen, idbPutAll,
+    ];
+    let _importWorkerURL = null;
+    function getImportWorkerURL() {
+      if (_importWorkerURL) return _importWorkerURL;
+      const src = "var I18N_W = {};\n" +
+        "function t(k, vars) { var s = I18N_W[k] || k; if (vars) for (var key in vars) s = s.split('{' + key + '}').join(String(vars[key])); return s; }\n" +
+        IMPORT_WORKER_FUNCS.map(function (f) { return f.toString(); }).join("\n\n") +
+        "\n(" + importWorkerMain.toString() + ")();\n";
+      _importWorkerURL = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      return _importWorkerURL;
+    }
+
+    // Messages are handled strictly in order; handlers may be async.
+    // h = { onProgress, onData, onParsed, onSaved, onSaveFailed }. Resolves when the worker is done.
+    function runImportInWorker(job, h) {
+      return new Promise(function (resolve, reject) {
+        let w;
+        try { w = new Worker(getImportWorkerURL()); }
+        catch (e) { reject(Object.assign(new Error("Worker unavailable: " + e.message), { noData: true })); return; }
+        let chain = Promise.resolve();
+        let gotData = false, finished = false;
+        const fail = function (err) {
+          if (finished) return; finished = true;
+          try { w.terminate(); } catch (_) { }
+          err.noData = !gotData; reject(err);
+        };
+        const run = function (fn) { chain = chain.then(fn).catch(fail); };
+        w.onmessage = function (e) {
+          const m = e.data;
+          if (m.type === "progress") run(() => h.onProgress(m));
+          else if (m.type === "data") { gotData = true; run(() => h.onData(m)); }
+          else if (m.type === "parsed") run(() => h.onParsed(m));
+          else if (m.type === "saved") run(() => h.onSaved(m));
+          else if (m.type === "saveFailed") run(() => h.onSaveFailed(m.from));
+          else if (m.type === "done") run(() => { if (!finished) { finished = true; w.terminate(); resolve(); } });
+          else if (m.type === "error") fail(new Error(m.message));
+        };
+        w.onerror = function (e) { if (e.preventDefault) e.preventDefault(); fail(new Error(e.message || "Import worker failed")); };
+        w.postMessage(job, [job.buf]);
+      });
+    }
+
+    async function runImportOnMainThread(job, h) {
+      const yieldUI = () => new Promise(r => setTimeout(r, 0));
+      await h.onProgress({ type: "progress", stage: "parse" });
+      await yieldUI();
+      const res = await parseImportBuffer(job.buf, job.name, loadSheetJS);
+      await h.onProgress({ type: "progress", stage: "dedupe", parsed: res.trades.length });
+      await yieldUI();
+      const dd = dedupeAndAssign(res.trades, job.existing, job.accountId, job.strategies);
+      const fresh = dd.fresh;
+      for (let i = 0; i < fresh.length; i += job.chunk) {
+        await h.onData({ type: "data", trades: fresh.slice(i, i + job.chunk), done: Math.min(i + job.chunk, fresh.length), total: fresh.length });
+      }
+      await h.onParsed({
+        type: "parsed", kind: res.kind,
+        errors: res.errors.slice(0, job.maxErrors), errorCount: res.errors.length,
+        duplicates: dd.duplicates, total: fresh.length,
+        startingBalance: res.startingBalance || 0, setsStartingBalance: !!res.setsStartingBalance,
+        equityStats: res.equityStats || null,
+      });
+      if (fresh.length) await h.onSaveFailed(0); // main thread writes everything, chunked
+    }
+
+    function showImportProgress(title, label, pct) {
+      let box = document.getElementById("importProgress");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "importProgress";
+        box.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:10000;width:320px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);font-size:12px;color:var(--text)";
+        box.innerHTML = '<div class="ip-title" style="font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>' +
+          '<div class="ip-label" style="color:var(--text-muted);margin-bottom:8px"></div>' +
+          '<div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden"><div class="ip-bar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>';
+        document.body.appendChild(box);
+      }
+      box.querySelector(".ip-title").textContent = title;
+      box.querySelector(".ip-label").textContent = label;
+      box.querySelector(".ip-bar").style.width = Math.max(0, Math.min(100, pct)) + "%";
+    }
+    function hideImportProgress() {
+      const box = document.getElementById("importProgress");
+      if (box) box.remove();
+    }
+
+    async function logEntriesBulk(entries) {
+      if (!entries.length) return;
+      try {
+        await dbBulkPut("logs", entries);
+        for (const e of entries) state.logs.unshift(e);
+        updateLogBadge();
+      } catch (e) { console.error("Log failed", e); }
+    }
+
+    let _importBusy = false;
+    let _importSaving = false;          // trades are in the UI, background save still running
+    let _importTouched = null;          // trades edited by the user while the save was running
+    function noteImportTouched(values) {
+      if (!_importSaving || !_importTouched) return;
+      if (Array.isArray(values)) for (const v of values) _importTouched.add(v); else if (values) _importTouched.add(values);
+    }
+    function importSaveGuard() {
+      if (!_importBusy) return false;
+      toast(t("import.title"), "An import is still saving to browser storage. Try again when it finishes.", "warn", 6000);
+      return true;
+    }
+    function _importBeforeUnload(e) {
+      e.preventDefault();
+      e.returnValue = "Import is still saving. Leaving now keeps only part of it.";
+      return e.returnValue;
+    }
+
     async function importTrades(file) {
       const account = currentAccount();
       if (!account) {
         toast(t("import.title"), t("import.noAccount"), "error");
         return;
       }
-
-      // Detect file type by extension and parse accordingly
-      const name = file.name.toLowerCase();
-      let parsedTrades, errors;
-
-      if (name.endsWith(".html")) {
-        // Read as ArrayBuffer first to detect UTF-16 BOM (MT5 exports UTF-16 LE)
-        const buf = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.onerror = () => rej(r.error);
-          r.readAsArrayBuffer(file);
+      if (_importBusy) {
+        toast(t("import.title"), "An import is already running. Wait for it to finish.", "warn");
+        return;
+      }
+      _importBusy = true;
+      const title = t("import.title") + ": " + file.name;
+      const fresh = [];        // everything this import added to state.trades
+      let summary = null;
+      let failed = false;
+      let saved = 0;
+      try {
+        showImportProgress(title, "Reading file…", 2);
+        const i18n = {};
+        for (const k of ["error.notEnoughFields", "error.invalidDirection", "error.invalidDate"]) {
+          i18n[k] = (I18N[state.language] && I18N[state.language][k]) || I18N.en[k] || k;
+        }
+        const makeJob = async () => ({
+          buf: await file.arrayBuffer(),
+          name: file.name,
+          existing: state.trades.map(x => x.ticket),
+          accountId: account.id,
+          strategies: state.strategies.filter(st => st.accountId === account.id).map(st => ({ id: st.id, magicNumbers: st.magicNumbers || [] })),
+          dbName: DB_NAME,
+          i18n,
+          xlsxUrl: SHEETJS_URL,
+          chunk: IMPORT_CHUNK,
+          maxErrors: MAX_IMPORT_ERRORS_LOGGED,
         });
-        const bytes = new Uint8Array(buf);
-        let text;
-        if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
-          text = new TextDecoder("utf-16le").decode(buf);
-        } else if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
-          text = new TextDecoder("utf-16be").decode(buf);
-        } else {
-          text = new TextDecoder("utf-8").decode(buf);
-        }
-        // Detect if this is a Strategy Tester report vs Account History
-        let result;
-        if (text.toLowerCase().includes("strategy tester report")) {
-          result = parseStrategyTesterHTMLReport(text);
-          if (result.startingBalance > 0) {
-            account.startingBalance = result.startingBalance;
-            await dbPut("accounts", account);
-          }
-        } else if (text.toLowerCase().includes("trade history report")) {
-          result = parseMT5TradeHistoryReport(text);
-        } else {
-          result = parseHTMLTradeReport(text);
-        }
-        parsedTrades = result.trades;
-        errors = result.errors;
-      } else if (name.endsWith(".xlsx")) {
-        try {
-          await loadSheetJS();
-        } catch (e) {
-          toast(t("import.title"), "Failed to load XLSX parser: " + e.message, "error");
-          return;
-        }
-        const buf = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.onerror = () => rej(r.error);
-          r.readAsArrayBuffer(file);
-        });
-        const workbook = XLSX.read(buf, { type: "array" });
-        // Detect MT5 Trade History Report format
-        let result;
-        const _sheetName = workbook.SheetNames[0];
-        if (_sheetName) {
-          const _sheet = workbook.Sheets[_sheetName];
-          const _rawData = XLSX.utils.sheet_to_json(_sheet, { header: 1, defval: "", raw: true });
-          const _firstRows = _rawData.slice(0, 10).map(function (r) { return String(r[0] || ""); }).join(" ");
-          if (_firstRows.toLowerCase().includes("trade history report")) {
-            result = parseMT5TradeHistoryXLSX(workbook);
-          } else if (_firstRows.toLowerCase().includes("strategy tester report")) {
-            result = parseStrategyTesterXLSX(workbook);
-            if (result.startingBalance > 0) {
-              account.startingBalance = result.startingBalance;
+        const savingLabel = (done, total) => "Saving to browser storage " + fmtInt(done) + " / " + fmtInt(total) + "… (you can keep working)";
+        const handlers = {
+          onProgress: (m) => {
+            if (m.stage === "parse") showImportProgress(title, "Parsing…", 10);
+            else if (m.stage === "dedupe") showImportProgress(title, "Checking " + fmtInt(m.parsed) + " trades for duplicates…", 30);
+          },
+          onData: (m) => {
+            const arr = state.trades;
+            for (let i = 0; i < m.trades.length; i++) { arr.push(m.trades[i]); fresh.push(m.trades[i]); }
+            showImportProgress(title, "Loading " + fmtInt(m.done) + " / " + fmtInt(m.total) + " trades…", 30 + 20 * (m.done / Math.max(1, m.total)));
+          },
+          onParsed: async (m) => {
+            summary = m;
+            invalidateTradeCache();
+            if (m.setsStartingBalance && m.startingBalance > 0) {
+              account.startingBalance = m.startingBalance;
               await dbPut("accounts", account);
             }
-          } else {
-            result = parseXLSXTrades(workbook);
-          }
-        } else {
-          result = parseXLSXTrades(workbook);
+            if (m.total > 0) {
+              _importSaving = true;
+              _importTouched = new Set();
+              window.addEventListener("beforeunload", _importBeforeUnload);
+              showImportProgress(title, savingLabel(0, m.total), 50);
+              toast(t("import.title"), fmtInt(m.total) + " new trade(s) loaded from " + file.name + ". Saving to browser storage in the background.", "info", 5000);
+            }
+            renderActiveTab();
+            renderAccountSelect();
+          },
+          onSaved: (m) => {
+            saved = m.done;
+            showImportProgress(title, savingLabel(m.done, m.total), 50 + 50 * (m.done / Math.max(1, m.total)));
+          },
+          onSaveFailed: async (from) => {
+            // Worker could not write (no IndexedDB in workers, quota, ...): write the rest here, chunked
+            for (let i = from; i < fresh.length; i += IMPORT_CHUNK) {
+              await idbPutAll(state.db, "trades", fresh.slice(i, i + IMPORT_CHUNK));
+              saved = Math.min(i + IMPORT_CHUNK, fresh.length);
+              showImportProgress(title, savingLabel(saved, fresh.length), 50 + 50 * (saved / Math.max(1, fresh.length)));
+              await new Promise(r => setTimeout(r, 0));
+            }
+          },
+        };
+
+        try {
+          await runImportInWorker(await makeJob(), handlers);
+        } catch (werr) {
+          if (!werr.noData) throw werr;
+          console.warn("Import worker unavailable, parsing on main thread:", werr.message);
+          await runImportOnMainThread(await makeJob(), handlers);
         }
-        parsedTrades = result.trades;
-        errors = result.errors;
-      } else {
-        // Default: .txt or .csv — semicolon-separated MT5 export
-        const text = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.onerror = () => rej(r.error);
-          r.readAsText(file);
-        });
-        const result = parseTradeFile(text);
-        parsedTrades = result.trades;
-        errors = result.errors;
-      }
 
-      // Build existing ticket index
-      const existing = new Set(state.trades.map(t => t.ticket));
-      const fresh = [];
-      let duplicates = 0;
-      for (const tr of parsedTrades) {
-        if (existing.has(tr.ticket)) { duplicates++; continue; }
-        fresh.push({ accountId: account.id, ...tr });
-        existing.add(tr.ticket);
-      }
+        // Re-save trades the user edited while the background save was running,
+        // so the import's original copy does not overwrite the edit.
+        if (_importTouched && _importTouched.size) await idbPutAll(state.db, "trades", Array.from(_importTouched));
 
-      // Auto-assign strategy based on magic number — STRICTLY scoped to this account.
-      const accountStrats = state.strategies.filter(st => st.accountId === account.id);
-      for (const tr of fresh) {
-        if (!tr.strategyId) {
-          const s = accountStrats.find(st => st.magicNumbers.includes(tr.magicNumber));
-          if (s) tr.strategyId = s.id;
+        const res = summary;
+        const es = res.equityStats;
+        if (res.kind === "balance-csv" && es) {
+          await logEntry("info", `Balance/Equity CSV ${file.name}: ${es.points} points, balance ${es.startBalance} -> ${es.endBalance}, max equity DD ${es.maxEquityDD} (${es.maxEquityDDPct}%), max deposit load ${es.maxDepositLoad}, entry commission ${es.commissionPerEntry ?? "n/a"}. Symbol, direction, volume and prices are not in this export.`, account.id);
+        }
+        // Errors: one bulk write instead of one transaction per bad row
+        const now = Date.now();
+        const errEntries = res.errors.map(e => ({
+          accountId: account.id, level: "error", timestamp: now,
+          message: `Import line ${e.line}: ${e.reason} | ${String(e.raw || "").slice(0, 120)}`,
+        }));
+        if (res.errorCount > res.errors.length) {
+          errEntries.push({ accountId: account.id, level: "error", timestamp: now, message: `${fmtInt(res.errorCount - res.errors.length)} more import error(s) from ${file.name} not logged individually (first ${res.errors.length} shown).` });
+        }
+        await logEntriesBulk(errEntries);
+        if (res.total > 0) {
+          await logEntry("info", `Imported ${res.total} new trade(s) from ${file.name} (duplicates: ${res.duplicates}, errors: ${res.errorCount})`, account.id);
+        }
+        hideImportProgress();
+        toast(
+          t("import.title"),
+          t("toast.importedFile", { file: file.name, new: res.total, dup: res.duplicates, err: res.errorCount, db: DB_NAME }),
+          res.total > 0 ? "success" : (res.errorCount ? "error" : "warn"),
+          8000
+        );
+      } catch (err) {
+        failed = true;
+        console.error("Import failed", err);
+        hideImportProgress();
+        // Trades that never reached storage would vanish on reload: drop them from the UI too
+        if (fresh.length > saved) {
+          const unsaved = new Set(fresh.slice(saved));
+          state.trades = state.trades.filter(x => !unsaved.has(x));
+        }
+        await logEntry("error", `Import of ${file.name} failed: ${err.message}${saved ? ` (${saved} trade(s) were saved before the failure)` : ""}`, account.id);
+        toast(t("import.title"), "Import failed: " + err.message + (saved ? ` (${fmtInt(saved)} trades saved)` : ""), "error", 8000);
+      } finally {
+        _importBusy = false;
+        _importSaving = false;
+        _importTouched = null;
+        window.removeEventListener("beforeunload", _importBeforeUnload);
+        // Success already rendered at "parsed"; re-render only if nothing was shown or it failed
+        if (!summary || failed) {
+          invalidateTradeCache();
+          renderActiveTab();
+          renderAccountSelect();
         }
       }
-
-      // Persist
-      if (fresh.length > 0) await dbBulkPut("trades", fresh);
-      state.trades = state.trades.concat(fresh);
-
-      // Log errors
-      for (const e of errors) {
-        await logEntry("error", `Import line ${e.line}: ${e.reason} | ${e.raw.slice(0, 120)}`, account.id);
-      }
-      if (fresh.length > 0) {
-        await logEntry("info", `Imported ${fresh.length} new trade(s) from ${file.name} (duplicates: ${duplicates}, errors: ${errors.length})`, account.id);
-      }
-
-      // Toast
-      toast(
-        t("import.title"),
-        t("toast.importedFile", { file: file.name, new: fresh.length, dup: duplicates, err: errors.length, db: DB_NAME }),
-        fresh.length > 0 ? "success" : (errors.length ? "error" : "warn"),
-        8000
-      );
-
-      renderActiveTab();
-      renderAccountSelect();
     }
 
     // === Strategy auto-assignment ===
@@ -4121,10 +4565,39 @@
     }
 
     // === Trade filtering ===
+    // === Performance caches ===
+    // Bumped on every change to trades (DB hooks, import, edits). Caches compare it, plus the
+    // array identity/length, so stale results are never reused.
+    let _dataVersion = 0;
+    let _accTradesCache = null;
+    let _filterCache = null;
+    let _metricsCache = new WeakMap();
+    let _tradesSortMemo = null;
+    function invalidateTradeCache() {
+      _dataVersion++;
+      _accTradesCache = null;
+      _filterCache = null;
+      _metricsCache = new WeakMap();
+      _tradesSortMemo = null;
+      _bucketCache = new WeakMap();
+      _timePartsCache = new WeakMap();
+    }
     function accountTrades() {
-      return state.trades.filter(t => t.accountId === state.activeAccountId);
+      const c = _accTradesCache;
+      if (c && c.v === _dataVersion && c.accId === state.activeAccountId && c.src === state.trades && c.len === state.trades.length) return c.arr;
+      const arr = state.trades.filter(t => t.accountId === state.activeAccountId);
+      _accTradesCache = { v: _dataVersion, accId: state.activeAccountId, src: state.trades, len: state.trades.length, arr };
+      return arr;
     }
     function applyFilters(trades, filters) {
+      const key = JSON.stringify(filters);
+      const c = _filterCache;
+      if (c && c.v === _dataVersion && c.src === trades && c.len === trades.length && c.key === key) return c.out;
+      const out = _applyFiltersUncached(trades, filters);
+      _filterCache = { v: _dataVersion, src: trades, len: trades.length, key, out };
+      return out;
+    }
+    function _applyFiltersUncached(trades, filters) {
       let out = trades;
       if (filters.from) {
         const ts = new Date(filters.from).getTime();
@@ -4167,8 +4640,18 @@
         tradeSequence: [],
       };
     }
+    // Memoized per (array, startingBalance). Results are shared, so callers must not mutate them.
     function computeMetrics(trades, startingBalance = 0) {
       if (!trades || trades.length === 0) return emptyMetrics(startingBalance);
+      let byBal = _metricsCache.get(trades);
+      if (!byBal) { byBal = new Map(); _metricsCache.set(trades, byBal); }
+      const hit = byBal.get(startingBalance);
+      if (hit && hit.v === _dataVersion && hit.len === trades.length) return hit.m;
+      const m = _computeMetricsUncached(trades, startingBalance);
+      byBal.set(startingBalance, { v: _dataVersion, len: trades.length, m });
+      return m;
+    }
+    function _computeMetricsUncached(trades, startingBalance) {
       const sorted = [...trades].sort((a, b) => a.closeTime - b.closeTime);
       let balance = startingBalance;
       let peak = startingBalance;
@@ -4224,8 +4707,8 @@
           tr._rMultiple = null;
         }
       }
-      // Build trade sequence for win/loss streak visualization
-      const tradeSequence = sorted.map((tr, i) => ({
+      // Trade sequence for win/loss streak charts: built on first use only (220k objects otherwise)
+      const buildTradeSequence = () => sorted.map((tr, i) => ({
         profit: tr.netProfit,
         isWin: tr.netProfit > 0,
         isLoss: tr.netProfit < 0,
@@ -4269,7 +4752,7 @@
       const downVar = negR.length ? negR.reduce((s, r) => s + (r - meanReturn) ** 2, 0) / negR.length : 0;
       const downStd = Math.sqrt(downVar);
       const sortino = downStd > 0 ? meanReturn / downStd : 0;
-      return {
+      const result = {
         total, wins, losses, winRate,
         longCount, shortCount, longWins, shortWins,
         longWinRate: longCount ? longWins / longCount : 0,
@@ -4292,8 +4775,196 @@
         avgLossR: rLosses.length ? rLosses.reduce((s, v) => s + v, 0) / rLosses.length : 0,
         expectancyR: rValues.length ? rValues.reduce((s, v) => s + v, 0) / rValues.length : 0,
         rMultipleCount: rValues.length,
-        tradeSequence,
       };
+      let _seq = null;
+      Object.defineProperty(result, "tradeSequence", { enumerable: true, get() { return _seq || (_seq = buildTradeSequence()); } });
+      return result;
+    }
+
+    // Build an {x,y} series of n points, reduced to about maxPts (min/max per bucket kept)
+    // without allocating all n points first.
+    function buildCurve(n, xAt, yAt, maxPts) {
+      const out = [];
+      if (n <= 0) return out;
+      if (n <= maxPts) { for (let i = 0; i < n; i++) out.push({ x: xAt(i), y: yAt(i) }); return out; }
+      out.push({ x: xAt(0), y: yAt(0) });
+      const nb = Math.max(1, Math.floor((maxPts - 2) / 2));
+      const size = (n - 2) / nb;
+      for (let b = 0; b < nb; b++) {
+        const st = 1 + Math.floor(b * size);
+        const en = Math.min(n - 1, 1 + Math.floor((b + 1) * size));
+        if (st >= en) continue;
+        let mi = st, ma = st, my = yAt(st), My = my;
+        for (let i = st + 1; i < en; i++) { const y = yAt(i); if (y < my) { my = y; mi = i; } if (y > My) { My = y; ma = i; } }
+        if (mi === ma) out.push({ x: xAt(mi), y: my });
+        else if (mi < ma) out.push({ x: xAt(mi), y: my }, { x: xAt(ma), y: My });
+        else out.push({ x: xAt(ma), y: My }, { x: xAt(mi), y: my });
+      }
+      out.push({ x: xAt(n - 1), y: yAt(n - 1) });
+      return out;
+    }
+    // Chart series derived from metrics, built once per metrics object (metrics are cached).
+    function metricsCurves(m) {
+      if (m._curves) return m._curves;
+      const MAXP = 4000;
+      const bc = m.balanceCurve;
+      const st = m.sortedTrades;
+      const balance = buildCurve(bc.length, i => bc[i].time, i => bc[i].balance, MAXP);
+      const dd = buildCurve(bc.length, i => bc[i].time, i => bc[i].dd, MAXP);
+      const negDd = dd.map(p => ({ x: p.x, y: -p.y }));
+      const cumY = new Float64Array(st.length + 1);
+      for (let i = 0; i < st.length; i++) cumY[i + 1] = cumY[i] + st[i].netProfit;
+      const cum = st.length ? buildCurve(st.length + 1, i => i === 0 ? st[0].openTime : st[i - 1].closeTime, i => cumY[i], MAXP) : [];
+      const ws = Math.min(20, st.length);
+      let winRate = [];
+      if (ws > 0) {
+        const cnt = st.length - ws + 1;
+        const wrY = new Float64Array(cnt);
+        let w = 0;
+        for (let i = 0; i < st.length; i++) {
+          if (st[i].netProfit > 0) w++;
+          if (i >= ws && st[i - ws].netProfit > 0) w--;
+          if (i >= ws - 1) wrY[i - ws + 1] = w / ws;
+        }
+        winRate = buildCurve(cnt, i => st[i + ws - 1].closeTime, i => wrY[i], MAXP);
+      }
+      Object.defineProperty(m, "_curves", { value: { balance, dd, negDd, cum, cumFinal: cumY[st.length], winRate }, enumerable: false });
+      return m._curves;
+    }
+
+    // Last `n` entries of m.tradeSequence without building all of them. Each entry carries
+    // its global index so labels stay "#<n>" of the full run.
+    function tradeSequenceTail(m, n) {
+      const st = m.sortedTrades;
+      const off = Math.max(0, st.length - n);
+      const out = [];
+      for (let i = off; i < st.length; i++) {
+        const tr = st[i];
+        out.push({ profit: tr.netProfit, isWin: tr.netProfit > 0, isLoss: tr.netProfit < 0, direction: tr.direction, symbol: tr.symbol, ticket: tr.ticket, closeTime: tr.closeTime, rMultiple: tr._rMultiple || null, _index: i });
+      }
+      return out;
+    }
+
+    // m.sortedTrades of an already computed metrics object for this exact array, if any.
+    function cachedCloseTimeOrder(arr) {
+      const byBal = _metricsCache.get(arr);
+      if (!byBal) return null;
+      for (const hit of byBal.values()) if (hit.v === _dataVersion && hit.len === arr.length) return hit.m.sortedTrades;
+      return null;
+    }
+    // Descending by closeTime with ties kept in original order (what a stable desc sort gives)
+    function stableReverseByCloseTime(asc) {
+      const out = new Array(asc.length);
+      let w = 0, end = asc.length;
+      while (end > 0) {
+        let start = end - 1;
+        const t0 = asc[start].closeTime;
+        while (start > 0 && asc[start - 1].closeTime === t0) start--;
+        for (let i = start; i < end; i++) out[w++] = asc[i];
+        end = start;
+      }
+      return out;
+    }
+
+    // Smallest-k selection without sorting the whole array (stable for ties).
+    function topK(arr, k, cmp) {
+      const out = [];
+      for (const x of arr) {
+        if (out.length < k) {
+          let i = out.length; out.push(x);
+          while (i > 0 && cmp(x, out[i - 1]) < 0) { out[i] = out[i - 1]; i--; }
+          out[i] = x;
+        } else if (cmp(x, out[k - 1]) < 0) {
+          let i = k - 1;
+          while (i > 0 && cmp(x, out[i - 1]) < 0) { out[i] = out[i - 1]; i--; }
+          out[i] = x;
+        }
+      }
+      return out;
+    }
+    // Rolling win rate over a fixed window, O(n). sorted = trades sorted by closeTime.
+    function rollingWinRate(sorted, window) {
+      const ws = Math.min(window, sorted.length);
+      const pts = [];
+      if (ws === 0) return pts;
+      let wins = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i].netProfit > 0) wins++;
+        if (i >= ws && sorted[i - ws].netProfit > 0) wins--;
+        if (i >= ws - 1) pts.push({ x: sorted[i].closeTime, y: wins / ws });
+      }
+      return pts;
+    }
+
+    // "YYYY-MM-DD" / "YYYY-MM" in local time, without padStart/template overhead
+    function dayKeyOf(ms) {
+      const d = new Date(ms); const mo = d.getMonth() + 1, dd = d.getDate();
+      return d.getFullYear() + (mo < 10 ? "-0" : "-") + mo + (dd < 10 ? "-0" : "-") + dd;
+    }
+    function monthKeyOf(ms) {
+      const d = new Date(ms); const mo = d.getMonth() + 1;
+      return d.getFullYear() + (mo < 10 ? "-0" : "-") + mo;
+    }
+    // Local-time parts of every trade (close day/weekday/hour, open hour) in typed arrays.
+    // One reused Date object instead of one new Date per trade per chart.
+    let _timePartsCache = new WeakMap();
+    function tradeTimeParts(trades) {
+      const hit = _timePartsCache.get(trades);
+      if (hit && hit.v === _dataVersion && hit.len === trades.length) return hit.p;
+      const n = trades.length;
+      const day = new Int32Array(n), month = new Int32Array(n), wday = new Uint8Array(n), hour = new Uint8Array(n), openHour = new Uint8Array(n);
+      const d = new Date(0);
+      for (let i = 0; i < n; i++) {
+        d.setTime(trades[i].closeTime);
+        const y = d.getFullYear(), mo = d.getMonth() + 1;
+        day[i] = y * 10000 + mo * 100 + d.getDate();
+        month[i] = y * 100 + mo;
+        wday[i] = d.getDay();
+        hour[i] = d.getHours();
+        d.setTime(trades[i].openTime);
+        openHour[i] = d.getHours();
+      }
+      const p = { day, month, wday, hour, openHour };
+      _timePartsCache.set(trades, { v: _dataVersion, len: n, p });
+      return p;
+    }
+    function _dayIntToKey(k) { const y = (k / 10000) | 0, mo = ((k / 100) | 0) % 100, dd = k % 100; return y + (mo < 10 ? "-0" : "-") + mo + (dd < 10 ? "-0" : "-") + dd; }
+    function _monthIntToKey(k) { const y = (k / 100) | 0, mo = k % 100; return y + (mo < 10 ? "-0" : "-") + mo; }
+    // Same output shape and order as bucketBy, keyed by a precomputed integer per trade
+    function bucketByInt(trades, keys, keyStr) {
+      const map = new Map();
+      for (let i = 0; i < trades.length; i++) {
+        const k = keys[i];
+        let b = map.get(k);
+        if (!b) { b = { key: keyStr(k), total: 0, sum: 0, wins: 0, losses: 0, trades: [] }; map.set(k, b); }
+        const tr = trades[i];
+        b.total++;
+        b.sum += tr.netProfit;
+        if (tr.netProfit > 0) b.wins++;
+        else if (tr.netProfit < 0) b.losses++;
+        b.trades.push(tr);
+      }
+      return Array.from(map.values());
+    }
+    // Per-weekday / per-hour trade lists from the cached parts
+    function listsBy(trades, keys, size) {
+      const lists = [];
+      for (let i = 0; i < size; i++) lists.push([]);
+      for (let i = 0; i < trades.length; i++) lists[keys[i]].push(trades[i]);
+      return lists;
+    }
+    // bucketBy memoized per (trades array, name). Only for keys that depend on trade data alone.
+    let _bucketCache = new WeakMap();
+    function cachedBucketBy(trades, name, keyFn) {
+      let byName = _bucketCache.get(trades);
+      if (!byName) { byName = new Map(); _bucketCache.set(trades, byName); }
+      const hit = byName.get(name);
+      if (hit && hit.v === _dataVersion && hit.len === trades.length) return hit.b;
+      const b = name === "day" ? bucketByInt(trades, tradeTimeParts(trades).day, _dayIntToKey)
+        : name === "month" ? bucketByInt(trades, tradeTimeParts(trades).month, _monthIntToKey)
+        : bucketBy(trades, keyFn);
+      byName.set(name, { v: _dataVersion, len: trades.length, b });
+      return b;
     }
 
     // === Bucket helpers ===
@@ -4318,8 +4989,15 @@
     }
 
     // === Canvas charting library ===
+    // CSS variables only change with the theme; getComputedStyle per call forced style recalcs
+    const _cssVarCache = new Map();
     function cssVar(name, fallback) {
-      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const key = (document.documentElement.getAttribute("data-theme") || "") + "|" + name;
+      let v = _cssVarCache.get(key);
+      if (v === undefined) {
+        v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        _cssVarCache.set(key, v);
+      }
       return v || fallback;
     }
     function ensureChartTip() {
@@ -4356,16 +5034,23 @@
     // onComplete fires when the animation finishes (at progress = 1).
     // Returns the rAF id so it can be cancelled. Setting opts.animate === false on a chart
     // (or returning duration = 0 from this function) just draws once at progress = 1.
+    // At most a few charts animate at once; the rest draw instantly. Animations stop when
+    // their canvas leaves the page (tab switch), so old tabs never keep the main thread busy.
+    let _activeChartAnims = 0;
+    const MAX_CHART_ANIMS = 4;
     function animateChart(canvas, durationMs, drawFn, onComplete) {
-      if (canvas._chartAnim) cancelAnimationFrame(canvas._chartAnim);
+      if (canvas._chartAnim) { cancelAnimationFrame(canvas._chartAnim); _activeChartAnims = Math.max(0, _activeChartAnims - 1); }
       canvas._chartAnim = null;
+      if (_activeChartAnims >= MAX_CHART_ANIMS) durationMs = 0;
       if (!durationMs || durationMs <= 0) {
         drawFn(1);
         if (onComplete) onComplete();
         return;
       }
       const start = performance.now();
+      _activeChartAnims++;
       function step(now) {
+        if (!canvas.isConnected) { canvas._chartAnim = null; _activeChartAnims = Math.max(0, _activeChartAnims - 1); return; }
         const t = Math.min(1, (now - start) / durationMs);
         // Ease-out cubic: snappy start, gentle finish.
         const eased = 1 - Math.pow(1 - t, 3);
@@ -4374,6 +5059,7 @@
           canvas._chartAnim = requestAnimationFrame(step);
         } else {
           canvas._chartAnim = null;
+          _activeChartAnims = Math.max(0, _activeChartAnims - 1);
           if (onComplete) onComplete();
         }
       }
@@ -4464,6 +5150,93 @@
       ctx.closePath();
       ctx.fill();
     }
+    // Charts are queued and drawn a few per frame, so a page with 20 charts never blocks
+    // the browser for one long frame. A newer draw for the same canvas replaces a pending one.
+    const _chartQueue = [];
+    let _chartQueueRunning = false;
+    function scheduleChart(canvas, fn) {
+      if (canvas) for (let i = 0; i < _chartQueue.length; i++) {
+        if (_chartQueue[i].canvas === canvas) { _chartQueue.splice(i, 1); break; }
+      }
+      _chartQueue.push({ canvas, fn, noAnim: !!window._chartsNoAnim });
+      if (!_chartQueueRunning) { _chartQueueRunning = true; requestAnimationFrame(_runChartQueue); }
+    }
+    function _runChartQueue() {
+      const start = performance.now();
+      while (_chartQueue.length && performance.now() - start < 10) {
+        const job = _chartQueue.shift();
+        if (job.canvas && !job.canvas.isConnected) continue;
+        const prev = window._chartsNoAnim;
+        window._chartsNoAnim = job.noAnim || prev;
+        try { job.fn(); } catch (e) { console.error("Chart draw failed", e); }
+        finally { window._chartsNoAnim = prev; }
+      }
+      if (_chartQueue.length) requestAnimationFrame(_runChartQueue);
+      else _chartQueueRunning = false;
+    }
+    // Data preparation for one chart, run from the same queue (skipped if the canvas is gone)
+    function queueWork(canvas, fn) { scheduleChart(canvas, fn); }
+    function drawLineChart(canvas, series, opts) { scheduleChart(canvas, () => _drawLineChartNow(canvas, series, opts || {})); }
+    function drawBarChart(canvas, items, opts) { scheduleChart(canvas, () => _drawBarChartNow(canvas, items, opts || {})); }
+    function drawHBarChart(canvas, items, opts) { scheduleChart(canvas, () => _drawHBarChartNow(canvas, items, opts || {})); }
+    function drawTradeSequence(canvas, sequence) { scheduleChart(canvas, () => _drawTradeSequenceNow(canvas, sequence)); }
+    function drawDonut(canvas, segments, opts) { scheduleChart(canvas, () => _drawDonutNow(canvas, segments, opts || {})); }
+    function drawRadarChart(canvas, data, opts) { scheduleChart(canvas, () => _drawRadarChartNow(canvas, data, opts || {})); }
+
+    // Reduce a point series to about maxPts points. Keeps first/last and the min and max of
+    // every bucket, so drawdown spikes and peaks survive. Returns original point objects.
+    function downsampleMinMax(data, maxPts) {
+      const n = data.length;
+      if (n <= maxPts || n < 4) return data;
+      const nb = Math.max(1, Math.floor((maxPts - 2) / 2));
+      const size = (n - 2) / nb;
+      const out = [data[0]];
+      for (let b = 0; b < nb; b++) {
+        const st = 1 + Math.floor(b * size);
+        const en = Math.min(n - 1, 1 + Math.floor((b + 1) * size));
+        if (st >= en) continue;
+        let mi = st, ma = st;
+        for (let i = st + 1; i < en; i++) {
+          const y = data[i].y;
+          if (y < data[mi].y) mi = i;
+          if (y > data[ma].y) ma = i;
+        }
+        if (mi === ma) out.push(data[mi]);
+        else if (mi < ma) out.push(data[mi], data[ma]);
+        else out.push(data[ma], data[mi]);
+      }
+      out.push(data[n - 1]);
+      return out;
+    }
+    // Bars wider than the plot allows: merge neighbours, keep the bar with the largest |value|.
+    function reduceBars(items, maxBars) {
+      const n = items.length;
+      if (n <= maxBars) return items;
+      const group = Math.ceil(n / maxBars);
+      const out = [];
+      for (let i = 0; i < n; i += group) {
+        let best = items[i];
+        const end = Math.min(n, i + group);
+        for (let j = i + 1; j < end; j++) if (Math.abs(items[j].value) > Math.abs(best.value)) best = items[j];
+        out.push(best);
+      }
+      return out;
+    }
+    function nearestByX(data, x) {
+      let lo = 0, hi = data.length - 1;
+      if (hi < 0) return null;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (data[mid].x < x) lo = mid + 1; else hi = mid;
+      }
+      if (lo > 0 && Math.abs(data[lo - 1].x - x) <= Math.abs(data[lo].x - x)) return data[lo - 1];
+      return data[lo];
+    }
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+      else ctx.rect(x, y, w, h);
+    }
     function setupCanvas(canvas) {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
@@ -4496,11 +5269,19 @@
       return n.toFixed(3);
     }
 
-    function drawLineChart(canvas, series, opts = {}) {
+    function _drawLineChartNow(canvas, series, opts = {}) {
       const { ctx, W, H } = setupCanvas(canvas);
       const padding = { top: 14, right: 18, bottom: 28, left: 62 };
       const plotW = W - padding.left - padding.right;
       const plotH = H - padding.top - padding.bottom;
+      // Large datasets: about 2 points per pixel is all the canvas can show
+      const _maxPts = Math.max(64, Math.ceil(plotW * 2));
+      series = series.map(s => (s.data && s.data.length > _maxPts) ? Object.assign({}, s, { data: downsampleMinMax(s.data, _maxPts) }) : s);
+      if (opts.band && opts.band.upper && opts.band.lower && (opts.band.upper.length > _maxPts || opts.band.lower.length > _maxPts)) {
+        opts = Object.assign({}, opts, { band: Object.assign({}, opts.band, { upper: downsampleMinMax(opts.band.upper, _maxPts), lower: downsampleMinMax(opts.band.lower, _maxPts) }) });
+      }
+      const _denseAt = plotW * 0.6; // above this many points, smoothing adds cost and no visible benefit
+      const _sortedX = series.map(s => { const d = s.data; for (let i = 1; i < d.length; i++) if (d[i].x < d[i - 1].x) return false; return true; });
       let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
       for (const s of series) {
         for (const p of s.data) {
@@ -4653,7 +5434,9 @@
             ctx.beginPath();
             ctx.moveTo(pts[0].x, baseY);
             ctx.lineTo(pts[0].x, pts[0].y);
-            for (let i = 0; i < pts.length - 1; i++) {
+            if (pts.length > _denseAt) {
+              for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+            } else for (let i = 0; i < pts.length - 1; i++) {
               const p0 = pts[i - 1] || pts[i];
               const p1 = pts[i];
               const p2 = pts[i + 1];
@@ -4686,7 +5469,10 @@
             ctx.lineJoin = "round";
             ctx.lineCap = "round";
             ctx.beginPath();
-            smoothPath(ctx, pts, tension);
+            if (pts.length > _denseAt) {
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+            } else smoothPath(ctx, pts, tension);
             ctx.stroke();
           }
         });
@@ -4698,6 +5484,8 @@
       animateChart(canvas, animMs, (p) => { drawBackground(); drawData(p); }, () => {
         // ---- Hover wiring: snapshot the finished chart and reuse on every mousemove ----
         const baseImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const _guideColor = cssVar("--text-muted", "#8b949e");
+        const _ringColor = cssVar("--bg", "#0f1419");
         canvas.onmousemove = e => {
           const rect = canvas.getBoundingClientRect();
           const px = e.clientX - rect.left;
@@ -4710,7 +5498,7 @@
           const xVal = xMin + ((px - padding.left) / plotW) * (xMax - xMin);
           ctx.putImageData(baseImg, 0, 0);
           // Vertical guideline
-          ctx.strokeStyle = cssVar("--text-muted", "#8b949e");
+          ctx.strokeStyle = _guideColor;
           ctx.setLineDash([3, 3]);
           ctx.beginPath();
           ctx.moveTo(px, padding.top);
@@ -4721,10 +5509,14 @@
           series.forEach((s, i) => {
             if (s.noHover) return;  // skip background sample lines, etc.
             // Find nearest data point in this series
-            let nearest = null, minDist = Infinity;
-            for (const p of s.data) {
-              const d = Math.abs(p.x - xVal);
-              if (d < minDist) { minDist = d; nearest = p; }
+            let nearest = null;
+            if (_sortedX[i]) nearest = nearestByX(s.data, xVal);
+            else {
+              let minDist = Infinity;
+              for (const p of s.data) {
+                const d = Math.abs(p.x - xVal);
+                if (d < minDist) { minDist = d; nearest = p; }
+              }
             }
             if (nearest) {
               const color = seriesColors[i];
@@ -4732,7 +5524,7 @@
               ctx.beginPath();
               ctx.arc(xScale(nearest.x), yScale(nearest.y), 4, 0, Math.PI * 2);
               ctx.fill();
-              ctx.strokeStyle = cssVar("--bg", "#0f1419");
+              ctx.strokeStyle = _ringColor;
               ctx.lineWidth = 1.5;
               ctx.stroke();
               const label = s.label ? `<span style="color:var(--text-muted)">${s.label}</span> ` : "";
@@ -4753,7 +5545,7 @@
       });
     }
 
-    function drawBarChart(canvas, items, opts = {}) {
+    function _drawBarChartNow(canvas, items, opts = {}) {
       const { ctx, W, H } = setupCanvas(canvas);
       const padding = { top: 14, right: 18, bottom: 30, left: 62 };
       const plotW = W - padding.left - padding.right;
@@ -4767,6 +5559,7 @@
         canvas.onmousemove = null; canvas.onmouseleave = null;
         return;
       }
+      items = reduceBars(items, Math.max(60, Math.floor(plotW / 2)));
       let yMin = 0, yMax = 0;
       for (const it of items) {
         if (it.value > yMax) yMax = it.value;
@@ -4891,7 +5684,7 @@
     }
 
     // Horizontal bar chart: categories on Y axis, numeric values on X axis.
-    function drawHBarChart(canvas, items, opts = {}) {
+    function _drawHBarChartNow(canvas, items, opts = {}) {
       const { ctx, W, H } = setupCanvas(canvas);
       ctx.font = '11px "Segoe UI", system-ui, sans-serif';
       const labelTexts = items.map(it => String(it.label).slice(0, 22));
@@ -5036,11 +5829,15 @@
     }
 
 
-    function drawTradeSequence(canvas, sequence) {
+    function _drawTradeSequenceNow(canvas, sequence) {
       const { ctx, W, H } = setupCanvas(canvas);
       const padding = { top: 14, right: 14, bottom: 28, left: 14 };
       const plotW = W - padding.left - padding.right;
       const plotH = H - padding.top - padding.bottom;
+      const _maxSeq = Math.max(20, Math.floor(plotW / 3));
+      let seqOffset = sequence.length > _maxSeq ? sequence.length - _maxSeq : 0;
+      if (seqOffset) sequence = sequence.slice(seqOffset);
+      if (sequence.length && sequence[0]._index !== undefined) seqOffset = sequence[0]._index;
       const count = sequence.length;
       if (count === 0) {
         ctx.clearRect(0, 0, W, H);
@@ -5109,17 +5906,21 @@
       const labelStride = Math.max(1, Math.floor(count / 50));
       for (let i = 0; i < count; i += labelStride) {
         const x = padding.left + i * (barW + gap) + barW / 2;
-        ctx.fillText("#" + (i + 1), x, padding.top + plotH + 16);
+        ctx.fillText("#" + (seqOffset + i + 1), x, padding.top + plotH + 16);
       }
       if (labelStride > 1 && (count - 1) % labelStride !== 0) {
         const x = padding.left + (count - 1) * (barW + gap) + barW / 2;
-        ctx.fillText("#" + count, x, padding.top + plotH + 16);
+        ctx.fillText("#" + (seqOffset + count), x, padding.top + plotH + 16);
       }
 
       // Tooltip
-      const tip = document.createElement("div");
-      tip.className = "chart-tip";
-      document.body.appendChild(tip);
+      let tip = document.getElementById("seqChartTip");
+      if (!tip) {
+        tip = document.createElement("div");
+        tip.id = "seqChartTip";
+        tip.className = "chart-tip";
+        document.body.appendChild(tip);
+      }
       canvas.onmousemove = function (e) {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
@@ -5138,7 +5939,7 @@
         if (tr.right > window.innerWidth) tip.style.left = (e.clientX - tr.width - 12) + "px";
         if (tr.bottom > window.innerHeight) tip.style.top = (e.clientY - tr.height - 8) + "px";
         tip.innerHTML = '<div class="chart-tip-row"><span class="chart-tip-dot" style="background:' +
-          (t.isWin ? greenC : redC) + '"></span>#' + (i + 1) + ' · ' +
+          (t.isWin ? greenC : redC) + '"></span>#' + (seqOffset + i + 1) + ' · ' +
           fmtDateShort(t.closeTime) + '</div>' +
           '<div style="margin-top:3px">' + t.symbol + ' · ' + t.direction +
           ' · <strong>' + fmtMoney(t.profit, 2, true) + '</strong></div>' +
@@ -5150,7 +5951,7 @@
     }
 
     // === Donut / pie chart ===
-    function drawDonut(canvas, segments, opts = {}) {
+    function _drawDonutNow(canvas, segments, opts = {}) {
       const { ctx, W, H } = setupCanvas(canvas);
       const cx = W / 2, cy = H / 2 + 6;
       const outerR = Math.min(W, H) / 2 - 24;
@@ -5231,7 +6032,7 @@
       });
     }
 
-    function drawRadarChart(canvas, data, opts = {}) {
+    function _drawRadarChartNow(canvas, data, opts = {}) {
       const { ctx, W, H } = setupCanvas(canvas);
       const cx = W / 2, cy = H / 2;
       const radius = Math.min(cx, cy) - 24;
@@ -5948,9 +6749,9 @@
 
       // === Best & Worst Trades ===
       if (trades.length > 0) {
-        const sortedByPnl = [...trades].sort((a, b) => b.netProfit - a.netProfit);
-        const top5 = sortedByPnl.slice(0, 5).filter(t => t.netProfit > 0);
-        const bot5 = [...sortedByPnl].reverse().slice(0, 5).filter(t => t.netProfit < 0);
+        const top5 = topK(trades, 5, (a, b) => b.netProfit - a.netProfit).filter(t => t.netProfit > 0);
+        // Reverse scan keeps the old tie order (it reversed a full descending sort)
+        const bot5 = topK(trades.slice().reverse(), 5, (a, b) => a.netProfit - b.netProfit).filter(t => t.netProfit < 0);
 
         if (top5.length > 0 || bot5.length > 0) {
           const bwRow = el("div", { class: "grid grid-2", style: "margin-bottom:18px" });
@@ -6006,7 +6807,7 @@
       // --- Row B: Win/Loss Donut + Top/Bottom Symbols + Weekday ---
       const row3 = el("div", { class: "grid grid-3", style: "margin-bottom:18px" });
       const winLossCard = makeChartCard(t("chart.winLoss"), "donut", { size: "sm" });
-      const symBuckets = bucketBy(trades, x => x.symbol).sort((a, b) => b.sum - a.sum);
+      const symBuckets = cachedBucketBy(trades, "symbol", x => x.symbol).sort((a, b) => b.sum - a.sum);
       const showTopBottom = symBuckets.length > 10;
       const symCard = makeChartCard(showTopBottom ? t("chart.topBottomSymbols") : t("chart.bySymbol"), "bar", { size: "sm" });
       const wdCard = makeChartCard(t("chart.byWeekday"), "weekday", { size: "sm" });
@@ -6048,166 +6849,162 @@
       row6.appendChild(ruleCard.card); row6.appendChild(sessionCard.card);
       root.appendChild(row6);
 
-      requestAnimationFrame(() => {
-        // Balance curve
+      // Each unit prepares its data and draws one chart; the queue spreads them across frames.
+      const curves = metricsCurves(m);
+      queueWork(balanceCard.canvas, () => {
         var _balColor = m.netProfit >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
-        drawLineChart(balanceCard.canvas, [{
-          data: m.balanceCurve.map(p => ({ x: p.time, y: p.balance })),
+        _drawLineChartNow(balanceCard.canvas, [{
+          data: curves.balance,
           color: _balColor, fill: true, label: t("chart.balance"),
         }], {
           xFormat: x => fmtAxisDate(x),
           yFormat: y => fmtMoney(y, 0),
           referenceLines: acc.startingBalance ? [{ value: acc.startingBalance, label: fmtMoney(acc.startingBalance, 0) }] : [],
         });
+      });
 
-        // P&L per month bar chart
-        const monthBuckets = bucketBy(trades, x => {
-          const d = new Date(x.closeTime);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        }).sort((a, b) => a.key.localeCompare(b.key));
-        drawBarChart(monthCard.canvas, monthBuckets.map((b, i) => ({ label: fmtAxisMonth(b.key), value: b.sum, _bucket: monthBuckets[i] })),
+      queueWork(monthCard.canvas, () => {
+        const monthBuckets = cachedBucketBy(trades, "month", x => monthKeyOf(x.closeTime)).sort((a, b) => a.key.localeCompare(b.key));
+        _drawBarChartNow(monthCard.canvas, monthBuckets.map((b, i) => ({ label: fmtAxisMonth(b.key), value: b.sum, _bucket: monthBuckets[i] })),
           { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
             onBarClick: (it) => showChartDrilldown("Month: " + it.label, it._bucket) });
+      });
 
-        // Win/Loss donut
-        drawDonut(winLossCard.canvas, [
-          { label: t("metric.wins"), value: m.wins, color: cssVar("--green", "#22c55e") },
-          { label: t("metric.losses"), value: m.losses, color: cssVar("--red", "#ef4444") },
-        ], { centerLabel: fmtPct(m.winRate, 1), centerSub: `${fmtInt(m.wins)} / ${fmtInt(m.losses)}`, valueFormat: fmtInt });
+      drawDonut(winLossCard.canvas, [
+        { label: t("metric.wins"), value: m.wins, color: cssVar("--green", "#22c55e") },
+        { label: t("metric.losses"), value: m.losses, color: cssVar("--red", "#ef4444") },
+      ], { centerLabel: fmtPct(m.winRate, 1), centerSub: `${fmtInt(m.wins)} / ${fmtInt(m.losses)}`, valueFormat: fmtInt });
 
-        // Symbol horizontal bar chart
+      queueWork(symCard.canvas, () => {
         let symItems;
         if (showTopBottom) {
           const top = symBuckets.slice(0, 5);
           const bot = symBuckets.slice(-5).filter(b => !top.includes(b));
           symItems = top.concat(bot.sort((a, b) => b.sum - a.sum));
         } else { symItems = symBuckets; }
-        drawHBarChart(symCard.canvas, symItems.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}`, _bucket: b })),
+        _drawHBarChartNow(symCard.canvas, symItems.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}`, _bucket: b })),
           { xFormat: x => fmtMoney(x, 0), tipFormat: v => fmtMoney(v, 2, true),
             onBarClick: (it) => showChartDrilldown("Symbol: " + it.label, it._bucket) });
+      });
 
-        // Weekday bar chart
+      queueWork(wdCard.canvas, () => {
+        const _wdLists = listsBy(trades, tradeTimeParts(trades).wday, 7);
         const weekdayBuckets = [1, 2, 3, 4, 5, 6, 0].map(i => {
-          const list = trades.filter(tr => new Date(tr.closeTime).getDay() === i);
-          const sum = list.reduce((s, x) => s + x.netProfit, 0);
-          const wins = list.filter(x => x.netProfit > 0).length;
-          const losses = list.filter(x => x.netProfit < 0).length;
+          const list = _wdLists[i];
+          let sum = 0, wins = 0, losses = 0;
+          for (const x of list) { sum += x.netProfit; if (x.netProfit > 0) wins++; else if (x.netProfit < 0) losses++; }
           return { label: t("weekday." + i).slice(0, 3), value: sum, _bucket: { key: t("weekday." + i), total: list.length, sum, wins, losses, trades: list }, tipExtra: `${list.length} ${t("nav.trades").toLowerCase()}` };
         });
-        drawBarChart(wdCard.canvas, weekdayBuckets, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+        _drawBarChartNow(wdCard.canvas, weekdayBuckets, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
           onBarClick: (it) => showChartDrilldown("Weekday: " + it._bucket.key, it._bucket) });
+      });
 
-        // Daily P&L
-        var dailyBuckets = bucketBy(trades, function (x) {
-          var d = new Date(x.closeTime);
-          return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-        }).sort(function (a, b) { return a.key.localeCompare(b.key); });
-        drawBarChart(dailyPnlCard.canvas, dailyBuckets.map(function (b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades", _bucket: b }; }),
+      const dailyBucketsSorted = () => cachedBucketBy(trades, "day", function (x) { return dayKeyOf(x.closeTime); }).sort(function (a, b) { return a.key.localeCompare(b.key); });
+      queueWork(dailyPnlCard.canvas, () => {
+        _drawBarChartNow(dailyPnlCard.canvas, dailyBucketsSorted().map(function (b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades", _bucket: b }; }),
           { yFormat: function (y) { return fmtMoney(y, 0); }, tipFormat: function (v) { return fmtMoney(v, 2, true); }, macd: true,
             onBarClick: function(it) { showChartDrilldown("Day: " + it.label, it._bucket); } });
+      });
 
-        // Equity curve 2
-        var sortedTrades2 = [...trades].sort(function (a, b) { return a.closeTime - b.closeTime; });
-        var eqPts2 = [{ x: sortedTrades2[0].openTime, y: 0 }]; var eqRun2 = 0;
-        for (var ei2 = 0; ei2 < sortedTrades2.length; ei2++) {
-          eqRun2 += sortedTrades2[ei2].netProfit;
-          eqPts2.push({ x: sortedTrades2[ei2].closeTime, y: eqRun2 });
-        }
-        drawLineChart(equityCard2.canvas, [{ data: eqPts2, color: eqRun2 >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c"), fill: true, label: "Equity" }],
+      queueWork(equityCard2.canvas, () => {
+        _drawLineChartNow(equityCard2.canvas, [{ data: curves.cum, color: curves.cumFinal >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c"), fill: true, label: "Equity" }],
           { xFormat: x => fmtAxisDate(x), yFormat: y => fmtMoney(y, 0) });
+      });
 
-        // Daily Volume
-        drawBarChart(dailyVolCard.canvas, dailyBuckets.map(function (b) {
-          var vol = b.trades.reduce(function (s, x) { return s + x.volume; }, 0);
+      queueWork(dailyVolCard.canvas, () => {
+        _drawBarChartNow(dailyVolCard.canvas, dailyBucketsSorted().map(function (b) {
+          var vol = 0;
+          for (var vi = 0; vi < b.trades.length; vi++) vol += b.trades[vi].volume;
           return { label: b.key.slice(5), value: vol, tipExtra: b.total + " trades", _bucket: b };
         }), { yFormat: function (y) { return fmtNum(y, 1); }, color: cssVar("--accent", "#4f8ef7"),
           onBarClick: function(it) { showChartDrilldown("Volume Day: " + it.label, it._bucket); } });
+      });
 
-        // Cumulative P&L
-        var cumPts = [{ x: sortedTrades2[0].openTime, y: 0 }]; var cumPnl = 0;
-        for (var ci = 0; ci < sortedTrades2.length; ci++) {
-          cumPnl += sortedTrades2[ci].netProfit;
-          cumPts.push({ x: sortedTrades2[ci].closeTime, y: cumPnl });
-        }
-        drawLineChart(cumPnlCard.canvas, [{ data: cumPts, color: cumPnl >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c"), fill: true, label: "Cumulative P&L" }],
+      queueWork(cumPnlCard.canvas, () => {
+        _drawLineChartNow(cumPnlCard.canvas, [{ data: curves.cum, color: curves.cumFinal >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c"), fill: true, label: "Cumulative P&L" }],
           { xFormat: x => fmtAxisDate(x), yFormat: y => fmtMoney(y, 0) });
+      });
 
-        // Drawdown
-        var ddPts = m.balanceCurve.map(function (p) { return { x: p.time, y: p.dd }; });
-        drawLineChart(ddCurveCard.canvas, [{ data: ddPts, color: cssVar("--red", "#e74c3c"), fill: true, label: "Drawdown" }],
+      queueWork(ddCurveCard.canvas, () => {
+        _drawLineChartNow(ddCurveCard.canvas, [{ data: curves.dd, color: cssVar("--red", "#e74c3c"), fill: true, label: "Drawdown" }],
           { xFormat: x => fmtAxisDate(x), yFormat: y => fmtMoney(y, 0) });
+      });
 
-        // Rolling Win Rate (20)
-        var wrSorted = [...trades].sort(function (a, b) { return a.closeTime - b.closeTime; });
-        var ws = Math.min(20, wrSorted.length); var wrPts = [];
-        for (var ri = 0; ri <= wrSorted.length - ws; ri++) {
-          var slice = wrSorted.slice(ri, ri + ws);
-          var wins = slice.filter(function (tr) { return tr.netProfit > 0; }).length;
-          wrPts.push({ x: slice[slice.length - 1].closeTime, y: wins / ws });
-        }
-        if (wrPts.length > 0) {
-          drawLineChart(winRateCard.canvas, [{ data: wrPts, color: cssVar("--accent2", "#7c5af7"), fill: true, label: "Win Rate", tipFormat: y => fmtPct(y, 1) }],
+      if (curves.winRate.length > 0) {
+        queueWork(winRateCard.canvas, () => {
+          _drawLineChartNow(winRateCard.canvas, [{ data: curves.winRate, color: cssVar("--accent2", "#7c5af7"), fill: true, label: "Win Rate", tipFormat: y => fmtPct(y, 1) }],
             { xFormat: x => fmtAxisDate(x), yFormat: y => fmtPct(y, 0), referenceLines: [{ value: 0.5, label: "50%" }] });
-        }
+        });
+      }
 
-        // P&L by Hour
+      queueWork(hourCard.canvas, () => {
+        var sortedTrades2 = m.sortedTrades;
         var hourBuckets = {};
+        var _hourLists = [];
+        for (var hz = 0; hz < 24; hz++) _hourLists.push([]);
+        var _hrs = tradeTimeParts(sortedTrades2).hour;
         for (var hi = 0; hi < sortedTrades2.length; hi++) {
-          var h = new Date(sortedTrades2[hi].closeTime).getHours();
-          if (!hourBuckets[h]) hourBuckets[h] = { sum: 0, count: 0 };
-          hourBuckets[h].sum += sortedTrades2[hi].netProfit;
+          var h = _hrs[hi];
+          if (!hourBuckets[h]) hourBuckets[h] = { sum: 0, count: 0, wins: 0, losses: 0 };
+          var np = sortedTrades2[hi].netProfit;
+          hourBuckets[h].sum += np;
           hourBuckets[h].count++;
+          if (np > 0) hourBuckets[h].wins++; else if (np < 0) hourBuckets[h].losses++;
+          _hourLists[h].push(sortedTrades2[hi]);
         }
         var hourItems = [];
         for (var hk = 0; hk < 24; hk++) {
           var hb = hourBuckets[hk];
-          const _hTrades = hb ? sortedTrades2.filter(t => new Date(t.closeTime).getHours() === hk) : [];
-          const _hWins = _hTrades.filter(t => t.netProfit > 0).length;
-          const _hLosses = _hTrades.filter(t => t.netProfit < 0).length;
+          const _hTrades = hb ? _hourLists[hk] : [];
           hourItems.push({ label: String(hk).padStart(2, "0") + ":00", value: hb ? hb.sum : 0, tipExtra: hb ? hb.count + " trades" : "0 trades",
-            _bucket: { key: String(hk).padStart(2, "0") + ":00", total: _hTrades.length, sum: hb ? hb.sum : 0, wins: _hWins, losses: _hLosses, trades: _hTrades } });
+            _bucket: { key: String(hk).padStart(2, "0") + ":00", total: _hTrades.length, sum: hb ? hb.sum : 0, wins: hb ? hb.wins : 0, losses: hb ? hb.losses : 0, trades: _hTrades } });
         }
-        drawBarChart(hourCard.canvas, hourItems, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
+        _drawBarChartNow(hourCard.canvas, hourItems, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
           onBarClick: (it) => { if (it._bucket.total > 0) showChartDrilldown("Hour: " + it.label, it._bucket); } });
+      });
 
-        // Win/Loss Streak
-        var seq = m.tradeSequence || [];
-        if (seq.length > 0) {
-          var streakItems = seq.map(function (s, si) {
-            return { label: "#" + (si + 1), value: s.isWin ? s.profit : -Math.abs(s.profit), tipExtra: s.isWin ? "Win" : "Loss" };
-          });
-          if (streakItems.length > 100) streakItems = streakItems.slice(-100);
-          drawBarChart(streakCard.canvas, streakItems, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
+      queueWork(streakCard.canvas, () => {
+        // Last 100 trades only (as before); map just those
+        var st = m.sortedTrades;
+        if (st.length > 0) {
+          var off = Math.max(0, st.length - 100);
+          var streakItems = [];
+          for (var si = off; si < st.length; si++) {
+            var p = st[si].netProfit, isWin = p > 0;
+            streakItems.push({ label: "#" + (si + 1), value: isWin ? p : -Math.abs(p), tipExtra: isWin ? "Win" : "Loss" });
+          }
+          _drawBarChartNow(streakCard.canvas, streakItems, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
         }
+      });
 
-        // P&L by Day (full-width)
-        var pnlByDayBuckets = bucketBy(trades, function (x) {
-          var d = new Date(x.closeTime);
-          return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-        }).sort(function (a, b) { return a.key.localeCompare(b.key); });
-        drawBarChart(pnlByDayCard.canvas, pnlByDayBuckets.map(function (b) {
+      queueWork(pnlByDayCard.canvas, () => {
+        _drawBarChartNow(pnlByDayCard.canvas, dailyBucketsSorted().map(function (b) {
           return { label: b.key.slice(5), value: b.sum, _bucket: b, tipExtra: b.total + " trades  ·  " + (b.sum >= 0 ? "+" : "") + fmtMoney(b.sum, 2, true) };
         }), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
           onBarClick: function(it) { showChartDrilldown("Day: " + it._bucket.key, it._bucket); } });
+      });
 
-        // Qualitative & Execution Charts
-        const setupBuckets = bucketBy(trades, x => x.setup || "Unassigned").sort((a, b) => b.sum - a.sum);
-        drawBarChart(setupCard.canvas, setupBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+      queueWork(setupCard.canvas, () => {
+        const setupBuckets = cachedBucketBy(trades, "setup", x => x.setup || "Unassigned").sort((a, b) => b.sum - a.sum);
+        _drawBarChartNow(setupCard.canvas, setupBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
           { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
             onBarClick: (it) => showChartDrilldown("Setup: " + it.label, it._bucket) });
-
-        const emotionBuckets = bucketBy(trades, x => x.emotionPre || "Unassigned").sort((a, b) => b.sum - a.sum);
-        drawBarChart(emotionCard.canvas, emotionBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+      });
+      queueWork(emotionCard.canvas, () => {
+        const emotionBuckets = cachedBucketBy(trades, "emotionPre", x => x.emotionPre || "Unassigned").sort((a, b) => b.sum - a.sum);
+        _drawBarChartNow(emotionCard.canvas, emotionBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
           { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
             onBarClick: (it) => showChartDrilldown("Emotion: " + it.label, it._bucket) });
-
-        const ruleBuckets = bucketBy(trades, x => x.ruleScore ? x.ruleScore + " Stars" : "Unassigned").sort((a, b) => a.key.localeCompare(b.key));
-        drawBarChart(ruleCard.canvas, ruleBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+      });
+      queueWork(ruleCard.canvas, () => {
+        const ruleBuckets = cachedBucketBy(trades, "ruleScore", x => x.ruleScore ? x.ruleScore + " Stars" : "Unassigned").sort((a, b) => a.key.localeCompare(b.key));
+        _drawBarChartNow(ruleCard.canvas, ruleBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
           { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
             onBarClick: (it) => showChartDrilldown("Rule Score: " + it.label, it._bucket) });
-
-        const sessionBuckets = bucketBy(trades, x => x.session || "Unassigned").sort((a, b) => b.sum - a.sum);
-        drawBarChart(sessionCard.canvas, sessionBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
+      });
+      queueWork(sessionCard.canvas, () => {
+        const sessionBuckets = cachedBucketBy(trades, "session", x => x.session || "Unassigned").sort((a, b) => b.sum - a.sum);
+        _drawBarChartNow(sessionCard.canvas, sessionBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: b.total + " trades", _bucket: b })),
           { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true,
             onBarClick: (it) => showChartDrilldown("Session: " + it.label, it._bucket) });
       });
@@ -6219,6 +7016,8 @@
       if (idx === -1) return;
       const tr = state.trades[idx];
       Object.assign(tr, details);
+      invalidateTradeCache();
+      noteImportTouched(tr);
       
       const db = await tryOpenDB();
       const tx = db.transaction("trades", "readwrite");
@@ -6624,14 +7423,14 @@
       actions.appendChild(el("button", { class: "btn", onClick: () => {
         const trs = accountTrades();
         if (trs.length === 0) return toast("No trades to export", "", "error");
-        let csv = "Ticket,Symbol,Direction,Volume,Open Time,Close Time,Open Price,Close Price,Profit,Commission,Swap,Net Profit,Emotion,Tags,Note,Commentn";
+        let csv = "Ticket,Symbol,Direction,Volume,Open Time,Close Time,Open Price,Close Price,Profit,Commission,Swap,Net Profit,Emotion,Tags,Note,Comment\n";
         trs.forEach(t => {
            csv += [
              t.ticket, t.symbol, t.direction, t.volume, 
              new Date(t.openTime).toISOString(), new Date(t.closeTime).toISOString(),
              t.openPrice, t.closePrice, t.profit, t.commission, t.swap, t.netProfit,
              t.emotion || "", (t.tags||[]).join(";"), (t.note||"").replace(/"/g, '""'), (t.comment||"").replace(/"/g, '""')
-           ].map(v => `"${v}"`).join(",") + "n";
+           ].map(v => `"${v}"`).join(",") + "\n";
         });
         const blob = new Blob([csv], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
@@ -6679,28 +7478,42 @@
       });
 
       function updateRows() {
-        // Filter
-        let filtered = applyFilters(allTrades, state.filters);
-        if (tradesViewState.search) {
-          const q = tradesViewState.search.toLowerCase();
-          filtered = filtered.filter(tr =>
-            (tr.ticket || "").toLowerCase().includes(q) ||
-            (tr.symbol || "").toLowerCase().includes(q) ||
-            (tr.comment || "").toLowerCase().includes(q) ||
-            (tr.magicNumber || "").toLowerCase().includes(q) ||
-            strategyName(tr.strategyId).toLowerCase().includes(q)
-          );
-        }
-        // Sort
+        // Filter + search + sort, memoized: paging and re-renders reuse the sorted list.
+        // Sorting works on a copy because applyFilters can return the shared cached array.
+        const base = applyFilters(allTrades, state.filters);
         const sk = tradesViewState.sortKey, sd = tradesViewState.sortDir === "asc" ? 1 : -1;
-        filtered.sort((a, b) => {
-          let va = a[sk], vb = b[sk];
-          if (sk === "strategy") { va = strategyName(a.strategyId); vb = strategyName(b.strategyId); }
-          if (va === null || va === undefined) va = (typeof vb === "string") ? "" : 0;
-          if (vb === null || vb === undefined) vb = (typeof va === "string") ? "" : 0;
-          if (typeof va === "string") return sd * va.localeCompare(vb);
-          return sd * (va - vb);
-        });
+        const memoKey = sk + "|" + sd + "|" + (tradesViewState.search || "") + "|" + _dataVersion;
+        let filtered;
+        if (_tradesSortMemo && _tradesSortMemo.base === base && _tradesSortMemo.len === base.length && _tradesSortMemo.key === memoKey) {
+          filtered = _tradesSortMemo.out;
+        } else {
+          const nameCache = new Map();
+          const nameOf = id => { if (!nameCache.has(id)) nameCache.set(id, strategyName(id)); return nameCache.get(id); };
+          if (tradesViewState.search) {
+            const q = tradesViewState.search.toLowerCase();
+            filtered = base.filter(tr =>
+              (tr.ticket || "").toLowerCase().includes(q) ||
+              (tr.symbol || "").toLowerCase().includes(q) ||
+              (tr.comment || "").toLowerCase().includes(q) ||
+              (tr.magicNumber || "").toLowerCase().includes(q) ||
+              nameOf(tr.strategyId).toLowerCase().includes(q)
+            );
+          } else {
+            filtered = base.slice();
+          }
+          const coll = new Intl.Collator();
+          const preSorted = !tradesViewState.search && sk === "closeTime" ? cachedCloseTimeOrder(base) : null;
+          if (preSorted) filtered = sd === 1 ? preSorted.slice() : stableReverseByCloseTime(preSorted);
+          else filtered.sort((a, b) => {
+            let va = a[sk], vb = b[sk];
+            if (sk === "strategy") { va = nameOf(a.strategyId); vb = nameOf(b.strategyId); }
+            if (va === null || va === undefined) va = (typeof vb === "string") ? "" : 0;
+            if (vb === null || vb === undefined) vb = (typeof va === "string") ? "" : 0;
+            if (typeof va === "string") return sd * coll.compare(va, String(vb));
+            return sd * (va - vb);
+          });
+          _tradesSortMemo = { base, len: base.length, key: memoKey, out: filtered };
+        }
 
         const total = filtered.length;
         const pageCount = Math.max(1, Math.ceil(total / TRADES_PAGE_SIZE));
@@ -7143,19 +7956,12 @@
       var dayLookup = {};
       var dayTrades = {};
       var monthSet = new Set();
-      for (var ti = 0; ti < trades.length; ti++) {
-        var tr = trades[ti];
-        var d = new Date(tr.closeTime);
-        var yr = d.getFullYear();
-        var mo = d.getMonth() + 1;
-        var day = d.getDate();
-        var dateKey = yr + '-' + String(mo).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-        if (!dayLookup[dateKey]) dayLookup[dateKey] = { netProfit: 0, count: 0 };
-        dayLookup[dateKey].netProfit += tr.netProfit;
-        dayLookup[dateKey].count++;
-        if (!dayTrades[dateKey]) dayTrades[dateKey] = [];
-        dayTrades[dateKey].push(tr);
-        monthSet.add(yr + '-' + String(mo).padStart(2, '0'));
+      var _dayB = cachedBucketBy(trades, "day", function (x) { return dayKeyOf(x.closeTime); });
+      for (var bi = 0; bi < _dayB.length; bi++) {
+        var b = _dayB[bi];
+        dayLookup[b.key] = { netProfit: b.sum, count: b.total };
+        dayTrades[b.key] = b.trades;
+        monthSet.add(b.key.slice(0, 7));
       }
       var periods = Array.from(monthSet).sort();
       if (periods.length === 0) return;
@@ -7442,10 +8248,11 @@
     }
     function renderMonthGrid(trades, startingBalance) {
       const byYear = {};
-      for (const tr of trades) {
-        const d = new Date(tr.closeTime);
-        const y = d.getFullYear();
-        const mi = d.getMonth();
+      const _mParts = tradeTimeParts(trades).month;
+      for (let _i = 0; _i < trades.length; _i++) {
+        const tr = trades[_i];
+        const y = (_mParts[_i] / 100) | 0;
+        const mi = (_mParts[_i] % 100) - 1;
         if (!byYear[y]) byYear[y] = { months: new Array(12).fill(0), counts: new Array(12).fill(0), total: 0, count: 0 };
         byYear[y].months[mi] += tr.netProfit;
         byYear[y].counts[mi]++;
@@ -7693,7 +8500,7 @@
           if (perfShow.balance) {
             var _balCol = m.netProfit >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
             series.push({
-              data: m.balanceCurve.map(p => ({ x: p.time, y: p.balance })),
+              data: metricsCurves(m).balance,
               color: _balCol,
               fill: lonelyBalance,
               label: t("chart.balance"),
@@ -7701,7 +8508,7 @@
           }
           if (perfShow.drawdown) {
             series.push({
-              data: m.balanceCurve.map(p => ({ x: p.time, y: -p.dd })),
+              data: metricsCurves(m).negDd,
               color: cssVar("--red", "#e74c3c"),
               fill: lonelyDrawdown,
               label: t("chart.drawdown"),
@@ -7741,8 +8548,9 @@
           "New York (14:00 - 22:00)": { total:0, wins:0, pnl:0, vol:0 },
           "Other (22:00 - 24:00)": { total:0, wins:0, pnl:0, vol:0 }
         };
-        filtered.forEach(t => {
-           const hr = new Date(t.openTime).getHours();
+        const _sessOpenHr = tradeTimeParts(filtered).openHour;
+        filtered.forEach((t, _i) => {
+           const hr = _sessOpenHr[_i];
            let sName = "Other (22:00 - 24:00)";
            if (hr >= 0 && hr < 8) sName = "Asian (00:00 - 08:00)";
            else if (hr >= 8 && hr < 14) sName = "London (08:00 - 14:00)";
@@ -7788,10 +8596,8 @@
         
         const hmData = {};
         for(let d=0; d<7; d++) { hmData[d] = {}; for(let h=0; h<24; h++) hmData[d][h] = 0; }
-        filtered.forEach(t => {
-           const d = new Date(t.closeTime);
-           hmData[d.getDay()][d.getHours()] += t.netProfit;
-        });
+        const _hmParts = tradeTimeParts(filtered);
+        for (let _i = 0; _i < filtered.length; _i++) hmData[_hmParts.wday[_i]][_hmParts.hour[_i]] += filtered[_i].netProfit;
         
         const hmTable = el("table", { style: "width:100%; border-collapse:collapse; text-align:center; font-size:12px;" });
         const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -7907,18 +8713,16 @@
         content.appendChild(analRow2);
 
         // Row: Trade sequence chart (win/loss streambars)
-        if (m.tradeSequence && m.tradeSequence.length >= 2) {
+        if (m.sortedTrades && m.sortedTrades.length >= 2) {
           const seqCard = makeChartCard("Trade Sequence", "bar");
           // Build subtitle stats
           const curStreak = (() => {
             let streak = 0;
-            const seq = m.tradeSequence;
+            const seq = m.sortedTrades;
             if (seq.length === 0) return { type: '-', count: 0 };
-            const last = seq[seq.length - 1];
-            const targetWin = last.isWin;
+            const targetWin = seq[seq.length - 1].netProfit > 0;
             for (let i = seq.length - 1; i >= 0; i--) {
-              const t = seq[i];
-              if (t.isWin === targetWin) streak++;
+              if ((seq[i].netProfit > 0) === targetWin) streak++;
               else break;
             }
             return { type: targetWin ? 'W' : 'L', count: streak, isWin: targetWin };
@@ -7926,7 +8730,7 @@
           seqCard.card.querySelector(".ct").appendChild(
             el("span", {
               class: "text-sm text-muted", style: "font-weight:400;text-transform:none;letter-spacing:0",
-              text: m.tradeSequence.length + " trades  ·  Current streak: " + curStreak.count + curStreak.type +
+              text: m.sortedTrades.length + " trades  ·  Current streak: " + curStreak.count + curStreak.type +
                 "  ·  Max win streak: " + m.maxWinStreak + "  ·  Max loss streak: " + m.maxLossStreak
             })
           );
@@ -7939,7 +8743,7 @@
           ]);
           seqCard.card.appendChild(legend);
           requestAnimationFrame(() => {
-            drawTradeSequence(seqCard.canvas, m.tradeSequence);
+            drawTradeSequence(seqCard.canvas, tradeSequenceTail(m, 2000));
           });
         }
 
@@ -7960,13 +8764,14 @@
           try {
             drawPerf();
             drawHistogram(distCard.canvas, m.returns, { bins: 30, binFormat: v => fmtMoney(v, 0) });
+            const _wdLists = listsBy(filtered, tradeTimeParts(filtered).wday, 7);
             const weekdayBuckets = [1, 2, 3, 4, 5, 6, 0].map(i => {
-              const list = filtered.filter(tr => new Date(tr.closeTime).getDay() === i);
+              const list = _wdLists[i];
               const sum = list.reduce((s, x) => s + x.netProfit, 0);
               return { label: t("weekday." + i).slice(0, 3), value: sum, tipExtra: `${list.length} ${t("nav.trades").toLowerCase()}` };
             });
             drawBarChart(wdCard.canvas, weekdayBuckets, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
-            const symBuckets = bucketBy(filtered, x => x.symbol).sort((a, b) => b.sum - a.sum).slice(0, 25);
+            const symBuckets = cachedBucketBy(filtered, "symbol", x => x.symbol).slice().sort((a, b) => b.sum - a.sum).slice(0, 25);
             drawBarChart(symCard.canvas, symBuckets.map(b => ({ label: b.key, value: b.sum, tipExtra: `${b.total} ${t("nav.trades").toLowerCase()}` })),
               { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
             const strBuckets = bucketBy(filtered, x => strategyName(x.strategyId)).sort((a, b) => b.sum - a.sum);
@@ -7975,22 +8780,15 @@
 
             // --- New charts ---
             // Daily P&L bars
-            var analDailyBuckets = bucketBy(filtered, function (x) {
-              var d = new Date(x.closeTime);
-              return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-            }).sort(function (a, b) { return a.key.localeCompare(b.key); });
+            var analDailyBuckets = cachedBucketBy(filtered, "day", function (x) { return dayKeyOf(x.closeTime); }).slice().sort(function (a, b) { return a.key.localeCompare(b.key); });
             drawBarChart(analDailyPnlCard.canvas, analDailyBuckets.map(function (b) { return { label: b.key.slice(5), value: b.sum, tipExtra: b.total + " trades" }; }),
               { yFormat: function (y) { return fmtMoney(y, 0); }, tipFormat: function (v) { return fmtMoney(v, 2, true); }, macd: true });
 
             // Equity curve (cumulative P&L)
-            var analSorted = [...filtered].sort(function (a, b) { return a.closeTime - b.closeTime; });
-            var analEqPts = [{ x: analSorted[0].openTime, y: 0 }];
-            var analEqRun = 0;
-            for (var ei = 0; ei < analSorted.length; ei++) {
-              analEqRun += analSorted[ei].netProfit;
-              analEqPts.push({ x: analSorted[ei].closeTime, y: analEqRun });
-            }
-            var analEqCol = analEqRun >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
+            var analSorted = m.sortedTrades;
+            var analCurves = metricsCurves(m);
+            var analEqPts = analCurves.cum;
+            var analEqCol = analCurves.cumFinal >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
             drawLineChart(analEquityCard.canvas, [{
               data: analEqPts,
               color: analEqCol,
@@ -8008,13 +8806,8 @@
             }), { yFormat: function (y) { return fmtNum(y, 1); }, color: cssVar("--accent", "#4f8ef7") });
 
             // Cumulative P&L per trade (line)
-            var analCumPts = [{ x: analSorted[0].openTime, y: 0 }];
-            var analCum = 0;
-            for (var ci = 0; ci < analSorted.length; ci++) {
-              analCum += analSorted[ci].netProfit;
-              analCumPts.push({ x: analSorted[ci].closeTime, y: analCum });
-            }
-            var analCumCol = analCum >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
+            var analCumPts = analCurves.cum;
+            var analCumCol = analCurves.cumFinal >= 0 ? cssVar("--green", "#2ecc71") : cssVar("--red", "#e74c3c");
             drawLineChart(analCumPnlCard.canvas, [{
               data: analCumPts,
               color: analCumCol,
@@ -8026,7 +8819,7 @@
             });
 
             // Drawdown (line)
-            var analDDPts = m.balanceCurve.map(function (p) { return { x: p.time, y: p.dd }; });
+            var analDDPts = analCurves.dd;
             drawLineChart(analDDCurveCard.canvas, [{
               data: analDDPts,
               color: cssVar("--red", "#e74c3c"),
@@ -8038,14 +8831,7 @@
             });
 
             // Rolling win rate (20-trade window as line)
-            var analWRSorted = [...filtered].sort(function (a, b) { return a.closeTime - b.closeTime; });
-            var analWS = Math.min(20, analWRSorted.length);
-            var analWRPts = [];
-            for (var ri = 0; ri <= analWRSorted.length - analWS; ri++) {
-              var slice = analWRSorted.slice(ri, ri + analWS);
-              var wins = slice.filter(function (t) { return t.netProfit > 0; }).length;
-              analWRPts.push({ x: slice[slice.length - 1].closeTime, y: wins / analWS });
-            }
+            var analWRPts = analCurves.winRate;
             if (analWRPts.length > 0) {
               drawLineChart(analWinRateCard.canvas, [{
                 data: analWRPts,
@@ -8062,8 +8848,9 @@
 
             // P&L by hour
             var analHourBuckets = {};
+            var _aHrs = tradeTimeParts(analSorted).hour;
             for (var hi = 0; hi < analSorted.length; hi++) {
-              var h = new Date(analSorted[hi].closeTime).getHours();
+              var h = _aHrs[hi];
               if (!analHourBuckets[h]) analHourBuckets[h] = { sum: 0, count: 0 };
               analHourBuckets[h].sum += analSorted[hi].netProfit;
               analHourBuckets[h].count++;
@@ -8079,16 +8866,13 @@
             drawBarChart(analHourCard.canvas, analHourItems, { yFormat: function (y) { return fmtMoney(y, 0); }, tipFormat: function (v) { return fmtMoney(v, 2, true); }, macd: true });
 
             // Win/Loss streak bars
-            var analSeq = m.tradeSequence || [];
-            if (analSeq.length > 0) {
-              var analStreakItems = analSeq.map(function (s, si) {
-                return {
-                  label: "#" + (si + 1),
-                  value: s.isWin ? s.profit : -Math.abs(s.profit),
-                  tipExtra: s.isWin ? "Win" : "Loss",
-                };
-              });
-              if (analStreakItems.length > 100) analStreakItems = analStreakItems.slice(-100);
+            if (analSorted.length > 0) {
+              var analOff = Math.max(0, analSorted.length - 100);
+              var analStreakItems = [];
+              for (var asi = analOff; asi < analSorted.length; asi++) {
+                var ap = analSorted[asi].netProfit, aWin = ap > 0;
+                analStreakItems.push({ label: "#" + (asi + 1), value: aWin ? ap : -Math.abs(ap), tipExtra: aWin ? "Win" : "Loss" });
+              }
               drawBarChart(analStreakCard.canvas, analStreakItems, { yFormat: function (y) { return fmtMoney(y, 0); }, tipFormat: function (v) { return fmtMoney(v, 2, true); }, macd: true });
             }
           } catch (e) { console.error("Analysis chart error:", e); }
@@ -8100,7 +8884,14 @@
     // Strip broker-specific suffixes from symbol names
     // e.g., XAUUSDb → XAUUSD, XAUUSDR → XAUUSD, EURUSDm → EURUSD,
     //        GBPJPYpro → GBPJPY, US30.cash → US30, NAS100micro → NAS100
+    const _cleanSymbolMemo = new Map();
     function _cleanBrokerSymbol(raw) {
+      if (!raw) return "";
+      let v = _cleanSymbolMemo.get(raw);
+      if (v === undefined) { v = _cleanBrokerSymbolUncached(raw); if (_cleanSymbolMemo.size < 5000) _cleanSymbolMemo.set(raw, v); }
+      return v;
+    }
+    function _cleanBrokerSymbolUncached(raw) {
       if (!raw) return "";
       // Step 1: Remove everything after dot/hash/exclamation (EURUSD.r → EURUSD)
       let s = raw.replace(/[.#!_].*$/, "").trim();
@@ -8922,9 +9713,12 @@
           cols.forEach(c => hdr.appendChild(el("th", { style: "padding:6px 8px;text-align:" + c.a + ";background:var(--bg3);white-space:nowrap;font-weight:600", text: c.l })));
           tbl.appendChild(el("thead", {}, [hdr]));
           const bdy = el("tbody");
-          r.trades.forEach((tr, i) => {
+          // Large histories: rows are added in pages (HTML strings, one frame per 250 rows)
+          // instead of creating every row up front (220k rows = ~3M DOM nodes).
+          const REPORT_ROWS_STEP = 1000;
+          let shownRows = 0;
+          const rowHtml = (tr, i) => {
             const bg = i % 2 === 0 ? "var(--bg1)" : "var(--bg2)";
-            const row = el("tr", { style: "background:" + bg });
             const vals = [
               { v: fmtDate(tr.openTime), a: "left", n: true },
               { v: tr.ticket, a: "left" },
@@ -8940,31 +9734,60 @@
               { v: tr.swap != null ? fmtMoney(tr.swap, 2, true) : "—", a: "right" },
               { v: fmtMoney(tr.netProfit, 2, true), a: "right", c: tr.netProfit >= 0 ? "pos" : "neg" },
             ];
-            vals.forEach(v => {
-              var s = "padding:5px 8px;text-align:" + v.a + ";border-bottom:1px solid var(--border)" + (v.n ? ";white-space:nowrap" : "");
-              var td = el("td", { style: s, class: v.c });
-              td.textContent = String(v.v);
-              row.appendChild(td);
-            });
-            bdy.appendChild(row);
-          });
+            let h = '<tr style="background:' + bg + '">';
+            for (const v of vals) {
+              const st = "padding:5px 8px;text-align:" + v.a + ";border-bottom:1px solid var(--border)" + (v.n ? ";white-space:nowrap" : "");
+              h += '<td style="' + st + '"' + (v.c ? ' class="' + v.c + '"' : "") + ">" + escapeHtml(String(v.v)) + "</td>";
+            }
+            return h + "</tr>";
+          };
+          const moreRow = el("div", { style: "display:flex;align-items:center;gap:12px;padding:10px 12px;font-size:12px;color:var(--text-muted)" });
+          const moreInfo = el("span");
+          const moreBtn = el("button", { class: "btn btn-sm", text: "Show " + fmtInt(REPORT_ROWS_STEP) + " more" });
+          moreRow.appendChild(moreInfo); moreRow.appendChild(moreBtn);
+          const updateMore = () => {
+            const total = r.trades.length;
+            moreInfo.textContent = "Showing " + fmtInt(shownRows) + " of " + fmtInt(total) + " trades" + (shownRows < total ? ". Use Export CSV on the Trades tab for the full list." : ".");
+            moreBtn.style.display = shownRows < total ? "" : "none";
+            moreRow.style.display = total > REPORT_ROWS_STEP ? "flex" : "none";
+          };
+          const appendRows = (count) => {
+            const end = Math.min(r.trades.length, shownRows + count);
+            moreBtn.disabled = true;
+            const step = () => {
+              if (!bdy.isConnected && shownRows > 0) return;
+              const stop = Math.min(end, shownRows + 250);
+              let html = "";
+              for (let i = shownRows; i < stop; i++) html += rowHtml(r.trades[i], i);
+              bdy.insertAdjacentHTML("beforeend", html);
+              shownRows = stop;
+              updateMore();
+              if (shownRows < end) requestAnimationFrame(step);
+              else moreBtn.disabled = false;
+            };
+            step();
+          };
+          moreBtn.addEventListener("click", () => appendRows(REPORT_ROWS_STEP));
           tbl.appendChild(bdy);
           wrap.appendChild(tbl);
           thCard.appendChild(wrap);
+          thCard.appendChild(moreRow);
           content.appendChild(thCard);
+          appendRows(REPORT_ROWS_STEP);
         }
 
         requestAnimationFrame(() => {
           const sb = r.metrics.startingBalance || 0;
+          const repCurves = metricsCurves(r.metrics);
           drawLineChart(balanceCard.canvas, [{
-            data: r.metrics.balanceCurve.map(p => ({ x: p.time, y: p.balance })),
+            data: repCurves.balance,
             color: cssVar("--accent", "#4f8ef7"), fill: true,
           }], {
             xFormat: x => fmtAxisDate(x), yFormat: y => fmtMoney(y, 0),
             referenceLines: sb ? [{ value: sb, label: fmtMoney(sb, 0) }] : [],
           });
           drawLineChart(ddCard.canvas, [{
-            data: r.metrics.balanceCurve.map(p => ({ x: p.time, y: -p.dd })),
+            data: repCurves.negDd,
             color: cssVar("--red", "#e74c3c"), fill: true,
             tipFormat: y => sb
               ? `${fmtMoney(y, 2, true)}  (${fmtPctSigned(y / sb, 2)})`
@@ -8973,15 +9796,13 @@
             xFormat: x => fmtAxisDate(x), yFormat: y => fmtMoney(y, 0),
             referenceLines: [{ value: 0, label: "0" }],
           });
+          const _repWd = listsBy(r.trades, tradeTimeParts(r.trades).wday, 7);
           const wd = [1, 2, 3, 4, 5, 6, 0].map(i => {
-            const list = r.trades.filter(t => new Date(t.closeTime).getDay() === i);
+            const list = _repWd[i];
             return { label: t("weekday." + i).slice(0, 3), value: list.reduce((s, x) => s + x.netProfit, 0) };
           });
           drawBarChart(wdCard.canvas, wd, { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
-          const months = bucketBy(r.trades, x => {
-            const d = new Date(x.closeTime);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          }).sort((a, b) => a.key.localeCompare(b.key));
+          const months = cachedBucketBy(r.trades, "month", x => monthKeyOf(x.closeTime)).slice().sort((a, b) => a.key.localeCompare(b.key));
           drawBarChart(monthCard.canvas, months.map(b => ({ label: fmtAxisMonth(b.key), value: b.sum })), { yFormat: y => fmtMoney(y, 0), tipFormat: v => fmtMoney(v, 2, true), macd: true });
         });
       }
@@ -9334,6 +10155,7 @@
       dangerCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("settings.dangerZone"), style: "color:var(--red)" })]));
       dangerCard.appendChild(el("button", {
         class: "btn btn-danger", text: t("settings.deleteAll"), onClick: async () => {
+          if (importSaveGuard()) return;
           if (!await confirmModal(t("settings.deleteAll"), t("settings.deleteAllConfirm"))) return;
           await dbClear("accounts"); await dbClear("trades"); await dbClear("strategies"); await dbClear("logs");
           state.accounts = []; state.trades = []; state.strategies = []; state.logs = []; state.activeAccountId = null;
@@ -9346,12 +10168,13 @@
       dangerCard.appendChild(el("div", { style: "height:10px" }));
       dangerCard.appendChild(el("button", {
         class: "btn btn-danger", text: t("settings.deleteAccountData"), onClick: async () => {
+          if (importSaveGuard()) return;
           var acc = currentAccount();
           if (!acc) { toast(t("import.title"), t("import.noAccount"), "error"); return; }
           if (!await confirmModal(t("settings.deleteAccountData"), t("settings.deleteAccountDataConfirm"))) return;
           // Delete trades for this account
           var tradesToDel = state.trades.filter(function (t) { return t.accountId === acc.id; });
-          for (var ti = 0; ti < tradesToDel.length; ti++) await dbDel("trades", [acc.id, tradesToDel[ti].ticket]);
+          if (tradesToDel.length) await dbDeleteAccountTrades(acc.id);
           // Delete strategies for this account
           var stratsToDel = state.strategies.filter(function (s) { return s.accountId === acc.id; });
           for (var si = 0; si < stratsToDel.length; si++) await dbDel("strategies", stratsToDel[si].id);
@@ -9449,10 +10272,11 @@
     }
 
     async function deleteAccount(id) {
+      if (importSaveGuard()) return;
       await dbDel("accounts", id);
       // Cascade-delete trades & strategies & logs for this account
       const tradesToDel = state.trades.filter(t => t.accountId === id);
-      for (const t of tradesToDel) await dbDel("trades", [id, t.ticket]);
+      if (tradesToDel.length) await dbDeleteAccountTrades(id);
       const stratsToDel = state.strategies.filter(s => s.accountId === id);
       for (const s of stratsToDel) await dbDel("strategies", s.id);
       // Logs: clear logs matching this account by re-reading + filtering
@@ -9523,6 +10347,7 @@
     }
 
     async function doRestore(file) {
+      if (importSaveGuard()) return;
       try {
         const text = await new Promise((res, rej) => {
           const r = new FileReader();
@@ -9741,7 +10566,7 @@
       // Load entities
       state.accounts = await dbGetAll("accounts");
       state.strategies = await dbGetAll("strategies");
-      state.trades = await dbGetAll("trades");
+      state.trades = await dbGetAllPaged("trades", 25000);
       state.logs = (await dbGetAll("logs")).sort((a, b) => b.timestamp - a.timestamp);
       // One-time migration: fix any trades stored under the older buy/sell interpretation.
       const dirtyTrades = state.trades.filter(normalizeTrade);
