@@ -2504,7 +2504,8 @@
     .tz-chart.sm { height: 120px; }
     .tz-chart.md { height: 220px; }
 
-    .tz-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--tz-border); margin-bottom: 14px; }
+    .tz-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--tz-border); margin-bottom: 14px; overflow-x: auto; scrollbar-width: thin; }
+    .tz-tabs .tz-tab { white-space: nowrap; flex: none; }
     .tz-tab { padding: 9px 12px; font-size: 13px; font-weight: 600; color: var(--tz-muted); cursor: pointer; border: 0; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: inherit; }
     .tz-tab.active { color: var(--tz-primary); border-bottom-color: var(--tz-primary); }
 
@@ -2681,7 +2682,30 @@
     .tz-heat-legend { display: flex; align-items: center; gap: 4px; margin-top: 12px; font-size: 11px; color: var(--tz-muted); }
     .tz-heat-legend i { cursor: default; }
     html.tz-on #modalBox input, html.tz-on #modalBox select, html.tz-on #modalBox textarea { background: var(--tz-card); color: var(--tz-text); border-color: var(--tz-border2); }
-  </style>
+      /* TZ round 3 */
+    .tz-year { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+    @media (max-width: 1300px) { .tz-year { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 860px) { .tz-year { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .tz-ymonth-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    .tz-ymonth-h b { font-size: 11.5px; }
+    .tz-ygrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .tz-ygrid i { aspect-ratio: 1; border-radius: 3px; background: var(--tz-card2); display: block; }
+    .tz-ygrid i:empty:not([data-k]) { background: transparent; }
+    .tz-ygrid i.has { cursor: pointer; }
+    .tz-ygrid i.has:hover { outline: 2px solid var(--tz-primary); }
+    .tz-mentor { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .tz-mentor-item { background: rgba(108, 76, 245, .07); border: 1px solid rgba(108, 76, 245, .25); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+    .tz-mentor-who { font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+    .tz-tins { display: flex; flex-direction: column; gap: 6px; }
+    .tz-tins div { font-size: 12.5px; line-height: 1.45; padding: 8px 10px; border-radius: 8px; border-left: 3px solid var(--tz-gray); background: var(--tz-card2); }
+    .tz-tins .neg { border-left-color: var(--tz-red, #F04438); }
+    .tz-tins .pos { border-left-color: var(--tz-green, #12B76A); }
+    .tz-tins .neu { border-left-color: var(--tz-primary); }
+    .tz-lesson { max-width: 760px; padding: 28px 32px; }
+    .tz-lesson h2 { margin: 0 0 16px; font-size: 22px; }
+    .tz-lesson p { font-size: 14.5px; line-height: 1.7; margin: 0 0 14px; }
+    .tz-drawer-f .danger, .tz-btn.danger { color: var(--tz-red, #F04438); }
+</style>
 </head>
 
 <body>
@@ -10984,7 +11008,7 @@
       log: { page: 0, sortKey: "closeTime", sortDir: -1, status: "all", side: "all", setup: "all", q: "" },
       journalShown: 10, journalOpen: {}, journalFocus: null,
       nb: { folder: "all", noteId: null, q: "" },
-      pbOpen: null, reportTab: "overview", f: tzEmptyFilters(), progressDay: null,
+      pbOpen: null, reportTab: "overview", f: tzEmptyFilters(), progressDay: null, allAcc: false, lesson: null, cmp: null,
     };
     let tzStore = { v: 1, accounts: {} };
     let _tzSaveTimer = null;
@@ -11011,6 +11035,8 @@
       moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
       chevron: '<path d="m6 9 6 6 6-6"/>',
       plus: '<path d="M12 5v14M5 12h14"/>',
+      university: '<path d="M2 9 12 4l10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M22 9v6"/>',
+      mentor: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>',
       close: '<path d="M18 6 6 18M6 6l12 12"/>',
       sunrise: '<path d="M17 18a5 5 0 0 0-10 0M12 2v7M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M8 6l4-4 4 4"/>',
     };
@@ -11081,7 +11107,7 @@
       return { from: dayKeyOf(start.getTime()), to: dayKeyOf(now.getTime()) };
     }
     function tzTrades() {
-      const all = accountTrades();
+      const all = tzBase();
       const f = tzRangeFilter();
       return tzApplyFilters(f ? applyFilters(all, f) : all);
     }
@@ -11189,7 +11215,7 @@
       return b;
     }
     function tzNoTrades(root) {
-      const any = accountTrades().length > 0;
+      const any = tzBase().length > 0;
       if (any) tzEmpty(root, "No trades in this date range", "Pick a wider range in the top bar.", [tzH("button", { class: "tz-btn", text: "Show all time", onClick: () => { tzState.range = "all"; renderTZ(); } })]);
       else tzEmpty(root, "No trades yet", "Import an MT5 report, Strategy Tester export or Balance/Equity CSV to get started.", [tzImportBtn(true)]);
     }
@@ -11204,11 +11230,11 @@
     // ---------- shell ----------
     const TZ_NAV = [
       ["dashboard", "Dashboard"], ["journal", "Daily Journal"], ["log", "Trade Log"], ["notebook", "Notebook"],
-      ["reports", "Reports"], ["insights", "Insights"], ["playbook", "Playbook"], ["challenges", "Challenges"], ["progress", "Progress Tracker"],
+      ["reports", "Reports"], ["insights", "Insights"], ["playbook", "Playbook"], ["challenges", "Challenges"], ["progress", "Progress Tracker"], ["university", "University"],
     ];
     const TZ_PAGES = {
       dashboard: tzPageDashboard, journal: tzPageJournal, log: tzPageLog, notebook: tzPageNotebook,
-      reports: tzPageReports, insights: tzPageInsights, playbook: tzPagePlaybook, challenges: tzPageChallenges, progress: tzPageProgress,
+      reports: tzPageReports, insights: tzPageInsights, playbook: tzPagePlaybook, challenges: tzPageChallenges, progress: tzPageProgress, university: tzPageUniversity, mentor: tzPageMentor, settings: tzPageSettings,
     };
     function renderTZ() {
       const root = document.getElementById("tzApp");
@@ -11222,8 +11248,8 @@
       const brand = tzH("div", { class: "tz-brand" });
       brand.innerHTML = '<div class="tz-logo">TS</div><span>TradeSave</span>';
       side.appendChild(brand);
-      const add = tzH("button", { class: "tz-add", onClick: () => triggerImport() });
-      add.innerHTML = tzIcon("plus", 16) + "<span>Import trades</span>";
+      const add = tzH("button", { class: "tz-add", onClick: () => tzAddTradeChooser() });
+      add.innerHTML = tzIcon("plus", 16) + "<span>Add trade</span>";
       side.appendChild(add);
       const nav = tzH("nav", { class: "tz-nav" });
       for (const [key, label] of TZ_NAV) {
@@ -11233,11 +11259,11 @@
       }
       side.appendChild(nav);
       const foot = tzH("div", { class: "tz-side-foot" });
-      const mentorBtn = tzH("button", { class: "tz-ni", onClick: () => tzMentorModal() });
-      mentorBtn.innerHTML = tzIcon("share") + "<span>Mentor mode</span>";
+      const mentorBtn = tzH("button", { class: "tz-ni" + (page === "mentor" ? " active" : ""), onClick: () => tzGo("mentor") });
+      mentorBtn.innerHTML = tzIcon("mentor") + "<span>Mentor mode</span>";
       foot.appendChild(mentorBtn);
-      const setBtn = tzH("button", { class: "tz-ni", onClick: async () => { await tzSetMode(false); switchTab("settings"); } });
-      setBtn.innerHTML = tzIcon("settings") + "<span>Accounts & settings</span>";
+      const setBtn = tzH("button", { class: "tz-ni" + (page === "settings" ? " active" : ""), onClick: () => tzGo("settings") });
+      setBtn.innerHTML = tzIcon("settings") + "<span>Settings</span>";
       const classicBtn = tzH("button", { class: "tz-ni", onClick: () => tzSetMode(false) });
       classicBtn.innerHTML = tzIcon("classic") + "<span>Classic view</span>";
       foot.appendChild(setBtn); foot.appendChild(classicBtn);
@@ -11246,7 +11272,7 @@
 
       const main = tzH("div", { class: "tz-main" });
       const top = tzH("header", { class: "tz-top" });
-      const titleMap = Object.fromEntries(TZ_NAV);
+      const titleMap = Object.assign(Object.fromEntries(TZ_NAV), { mentor: "Mentor Mode", settings: "Settings" });
       top.appendChild(tzH("div", { class: "tz-title", text: titleMap[page] }));
       const tr = tzH("div", { class: "tz-top-r" });
       const startBtn = tzH("button", { class: "tz-btn primary", onClick: () => tzGo("journal", { focusDay: tzTodayKey() }) });
@@ -11260,9 +11286,17 @@
       tr.appendChild(rangeSel);
       const accSel = tzH("select", { class: "tz-select", title: "Account" });
       if (!state.accounts.length) accSel.appendChild(tzH("option", { value: "", text: "No account" }));
+      if (state.accounts.length > 1) accSel.appendChild(tzH("option", { value: "__all__", text: "All accounts" }));
       for (const a of state.accounts) accSel.appendChild(tzH("option", { value: a.id, text: a.name }));
-      accSel.value = state.activeAccountId || "";
-      accSel.addEventListener("change", () => { tzState.pbOpen = null; tzState.nb.noteId = null; tzState.log.sel.clear(); tzState.f = tzEmptyFilters(); setActiveAccount(accSel.value); });
+      if (tzState.allAcc && state.accounts.length < 2) tzState.allAcc = false;
+      accSel.value = tzState.allAcc ? "__all__" : (state.activeAccountId || "");
+      accSel.addEventListener("change", () => {
+        tzState.log.sel.clear(); tzState.f = tzEmptyFilters(); tzState.log.page = 0;
+        if (accSel.value === "__all__") { tzState.allAcc = true; renderTZ(); return; }
+        const same = accSel.value === state.activeAccountId;
+        tzState.allAcc = false; tzState.pbOpen = null; tzState.nb.noteId = null;
+        if (same) renderTZ(); else setActiveAccount(accSel.value);
+      });
       tr.appendChild(accSel);
       const themeBtn = tzH("button", { class: "tz-btn sm ghost", title: "Toggle light / dark", onClick: () => setTheme(state.theme === "dark" ? "light" : "dark") });
       themeBtn.innerHTML = tzIcon(state.theme === "dark" ? "sun" : "moon", 17);
@@ -11289,7 +11323,7 @@
       const trades = tzTrades();
       if (!trades.length) return tzNoTrades(c);
       const acc = currentAccount();
-      const m = computeMetrics(trades, acc.startingBalance || 0);
+      const m = computeMetrics(trades, tzStartBal());
       const days = tzDays(trades);
       c.appendChild(tzKpiRow(m, days));
 
@@ -11427,7 +11461,7 @@
       const head = tzH("div", { class: "tz-drawer-h" });
       const ht = tzH("div");
       ht.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:17px">' + escapeHtml(tr.symbol || "—") + "</b>" + tzSide(tr) + tzBadge(tr) + "</div>" +
-        '<div class="tz-sub">#' + escapeHtml(tr.ticket) + " · " + escapeHtml(fmtDate(tr.openTime)) + " → " + escapeHtml(fmtDate(tr.closeTime)) + "</div>";
+        '<div class="tz-sub">' + (tzState.allAcc ? escapeHtml(tzAccName(tr.accountId)) + " · " : "") + '#' + escapeHtml(tr.ticket) + " · " + escapeHtml(fmtDate(tr.openTime)) + " → " + escapeHtml(fmtDate(tr.closeTime)) + "</div>";
       head.appendChild(ht);
       const x = tzH("button", { class: "tz-btn sm ghost", onClick: tzCloseDrawer });
       x.innerHTML = tzIcon("close", 16);
@@ -11440,11 +11474,20 @@
       const r = (tr.stopLoss && tr.volume && tr.openPrice) ? tr.netProfit / (Math.abs(tr.openPrice - tr.stopLoss) * tr.volume) : null;
       const dl = tzH("div", { class: "tz-dl" });
       const kv = [["Side", tr.direction], ["Volume", fmtNum(tr.volume, 2)], ["Entry price", fmtNum(tr.openPrice, 5)], ["Exit price", fmtNum(tr.closePrice, 5)],
-        ["Gross P&L", fmtMoney(tr.profit, 2, true)], ["Commission", fmtMoney(tr.commission, 2)], ["Swap", fmtMoney(tr.swap, 2)], ["Duration", fmtDuration(tr.closeTime - tr.openTime)],
+        ["Gross P&L", fmtMoney(tr.profit, 2, true)], ["Commission", fmtMoney(tr.commission, 2)], ["Swap", fmtMoney(tr.swap, 2)], ["Duration", fmtDuration(tr.closeTime - tr.openTime)], ["Price move", (tr.openPrice && tr.closePrice) ? fmtNum((tr.closePrice - tr.openPrice) * (tr.direction === "Short" ? -1 : 1), 5) : "—"],
         ["Stop loss", tr.stopLoss ? fmtNum(tr.stopLoss, 5) : "—"], ["Take profit", tr.takeProfit ? fmtNum(tr.takeProfit, 5) : "—"], ["R-multiple", r === null || !isFinite(r) ? "—" : fmtNum(r, 2) + "R"], ["Magic", tr.magicNumber || "—"]];
       dl.innerHTML = kv.map(([k, v]) => "<div><span>" + escapeHtml(k) + "</span><b>" + escapeHtml(String(v)) + "</b></div>").join("");
       body.appendChild(dl);
       if (tr.comment) body.appendChild(tzH("div", { class: "tz-sub", style: "margin-top:-6px", text: "Comment: " + tr.comment }));
+      const mc = tzMentorForTrade(tr);
+      if (mc.length) { body.appendChild(tzH("label", { class: "tz-label", text: "Mentor comments" })); body.appendChild(tzMentorBlock(mc)); }
+      const ins = tzTradeInsights(tr);
+      if (ins.length) {
+        body.appendChild(tzH("label", { class: "tz-label", text: "Trade insights" }));
+        const ib = tzH("div", { class: "tz-tins" });
+        ib.innerHTML = ins.map(([k, t]) => '<div class="' + k + '">' + escapeHtml(t) + "</div>").join("");
+        body.appendChild(ib);
+      }
 
       const rev = tzReviewBlock(tr);
       body.appendChild(rev.node);
@@ -11484,11 +11527,18 @@
       body.appendChild(noteIn);
       d.appendChild(body);
       const footer = tzH("div", { class: "tz-drawer-f" });
+      footer.appendChild(tzH("button", {
+        class: "tz-btn sm danger", text: "Delete", style: "margin-right:auto", onClick: async () => {
+          if (!await confirmModal("Delete trade", "Delete " + (tr.symbol || "") + " #" + tr.ticket + "? This cannot be undone.")) return;
+          await tzBulkDelete([tr]); tzCloseDrawer(); toast("Deleted", "Trade removed", "success", 2000); renderTZ();
+        }
+      }));
+      footer.appendChild(tzH("button", { class: "tz-btn sm", text: "Edit trade", onClick: () => tzTradeForm(tr) }));
       footer.appendChild(tzH("button", { class: "tz-btn", text: "Cancel", onClick: tzCloseDrawer }));
       footer.appendChild(tzH("button", {
         class: "tz-btn primary", text: "Save", onClick: async () => {
           const tags = tagIn.value.split(",").map(s => s.trim()).filter(Boolean);
-          await saveTradeDetails(tr.ticket, Object.assign({ setup: pbSel.value || "", tags, note: noteIn.value, rulesFollowed: Array.from(followed) }, rev.get()));
+          await tzSaveTrade(tr, Object.assign({ setup: pbSel.value || "", tags, note: noteIn.value, rulesFollowed: Array.from(followed) }, rev.get()));
           tzCloseDrawer();
         }
       }));
@@ -11598,6 +11648,8 @@
         ta.addEventListener("input", () => { saved.textContent = "Saving…"; persist(); });
         noteBox.appendChild(tzLabelRow(lab, () => ta)); noteBox.appendChild(ta);
         body.appendChild(noteBox);
+        const dmc = tzMentorForDay(d.key);
+        if (dmc.length) body.appendChild(tzMentorBlock(dmc));
         card.appendChild(body);
         c.appendChild(card);
         if (d.key === focus) focusNode = { card, ta };
@@ -11647,7 +11699,7 @@
       if (L.sel.size) { const vis = new Set(rows); for (const x of Array.from(L.sel)) if (!vis.has(x)) L.sel.delete(x); }
       const acc = currentAccount();
       if (rows.length) {
-        const m = computeMetrics(rows, acc.startingBalance || 0);
+        const m = computeMetrics(rows, tzStartBal());
         c.appendChild(tzKpiRow(m, tzDays(rows), { four: true }));
       }
       const card = tzH("div", { class: "tz-card flush" });
@@ -11661,6 +11713,8 @@
       const pbs = tzAcc().playbooks.map(p => [p.name, p.name]);
       fb.appendChild(mkSel(L.setup, [["all", "All playbooks"], ["__none__", "No playbook"]].concat(pbs), v => { L.setup = v; L.page = 0; renderTZ(); }));
       fb.appendChild(tzH("div", { class: "tz-sub", style: "margin-left:auto", text: fmtInt(rows.length) + " trade" + (rows.length === 1 ? "" : "s") }));
+      fb.appendChild(tzH("button", { class: "tz-btn sm", text: "Export CSV", onClick: () => tzExportCSV(rows) }));
+      fb.appendChild(tzH("button", { class: "tz-btn sm primary", text: "+ Add trade", onClick: () => tzTradeForm(null) }));
       card.appendChild(fb);
       if (L.sel.size) card.appendChild(tzBulkBar(rows));
       const pages = Math.max(1, Math.ceil(rows.length / TZ_PAGE_SIZE));
@@ -11726,7 +11780,7 @@
       }));
       fcol.appendChild(fh);
       const flist = tzH("div", { class: "tz-nb-list" });
-      const tradeNotes = accountTrades().filter(tr => tr.note && String(tr.note).trim());
+      const tradeNotes = tzBase().filter(tr => tr.note && String(tr.note).trim());
       const journalKeys = Object.keys(store.journal).filter(k => store.journal[k] && store.journal[k].trim()).sort().reverse();
       const folders = [["all", "All notes", store.notes.length], ["__journal", "Daily journal", journalKeys.length], ["__trades", "Trade notes", tradeNotes.length], ["__templates", "Templates", store.templates.length]]
         .concat(store.folders.map(f => [f.id, f.name, store.notes.filter(n => n.folderId === f.id).length]));
@@ -11889,7 +11943,7 @@
             const old = existing.name;
             Object.assign(existing, { name, description: dIn.value.trim(), rules });
             if (old !== name) {
-              const changed = accountTrades().filter(tr => tr.setup === old);
+              const changed = tzBase().filter(tr => tr.setup === old);
               changed.forEach(tr => { tr.setup = name; });
               if (changed.length) { invalidateTradeCache(); noteImportTouched(changed); await idbPutAll(state.db, "trades", changed); }
             }
@@ -12104,7 +12158,7 @@
       winRate: { label: "Win rate", unit: "pct", describe: ch => "Hold a win rate of " + ch.target + "% or better over your next " + ch.days + " trades" },
     };
     function tzEvalChallenge(ch) {
-      const all = accountTrades();
+      const all = tzBase();
       const start = tzKeyToDate(ch.start).getTime();
       const windowEnd = ch.type === "profitTarget" || ch.type === "greenDays" ? start + ch.days * 86400000 : Infinity;
       const now = Date.now();
@@ -12223,10 +12277,10 @@
       const trades = tzTrades();
       if (!trades.length) return tzNoTrades(c);
       const acc = currentAccount();
-      const m = computeMetrics(trades, acc.startingBalance || 0);
+      const m = computeMetrics(trades, tzStartBal());
       const days = tzDays(trades);
       const tabs = tzH("div", { class: "tz-tabs" });
-      [["overview", "Overview"], ["times", "Days & times"], ["symbols", "Symbols"], ["windays", "Win vs loss days"], ["tags", "Tags"], ["mistakes", "Mistakes"], ["rmultiple", "R-multiple"]].forEach(([k, l]) =>
+      [["overview", "Overview"], ["times", "Days & times"], ["symbols", "Symbols"], ["windays", "Win vs loss days"], ["tags", "Tags"], ["mistakes", "Mistakes"], ["rmultiple", "R-multiple"], ["compare", "Compare"], ["drawdown", "Drawdown"], ["periods", "Weeks & months"], ["yearly", "Yearly calendar"], ["playbooks", "Playbooks"]].forEach(([k, l]) =>
         tabs.appendChild(tzH("button", { class: "tz-tab" + (tzState.reportTab === k ? " active" : ""), text: l, onClick: () => { tzState.reportTab = k; renderTZ(); } })));
       c.appendChild(tabs);
       const tab = tzState.reportTab;
@@ -12316,6 +12370,8 @@
           g.appendChild(card);
         });
         c.appendChild(g);
+      } else if (["compare", "drawdown", "periods", "yearly", "playbooks"].includes(tab)) {
+        tzReportMore(c, tab, trades);
       } else {
         tzReportExtra(c, tab, trades);
       }
@@ -12387,7 +12443,7 @@
     }
     function tzDistinct(field) {
       const s = new Set();
-      for (const tr of accountTrades()) {
+      for (const tr of tzBase()) {
         const v = tr[field];
         if (Array.isArray(v)) v.forEach(x => x && s.add(x));
         else if (v) s.add(v);
@@ -12745,7 +12801,7 @@
     function tzPageProgress(c) {
       const store = tzAcc(), P = store.progress;
       const rules = tzProgressRules();
-      const days = tzDays(accountTrades());
+      const days = tzDays(tzBase());
       const dayMap = new Map(days.map(d => [d.key, d]));
       const today = tzTodayKey();
       const sel = tzState.progressDay || today;
@@ -12889,7 +12945,7 @@
       const trades = tzTrades();
       if (!trades.length) return null;
       const acc = currentAccount(), store = tzAcc();
-      const m = computeMetrics(trades, acc.startingBalance || 0);
+      const m = computeMetrics(trades, tzStartBal());
       const days = tzDays(trades);
       const E = escapeHtml, cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
       let dw = 0; days.forEach(d => { if (d.sum > 0) dw++; });
@@ -12904,17 +12960,22 @@
       const svg = '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" style="width:100%;height:220px"><line x1="0" x2="' + W + '" y1="' + sy(0).toFixed(1) + '" y2="' + sy(0).toFixed(1) + '" stroke="#DCDDE8" stroke-dasharray="4 4"/>' +
         '<polygon fill="' + lineCol + '22" points="0,' + sy(0).toFixed(1) + " " + poly + " " + W + "," + sy(0).toFixed(1) + '"/><polyline fill="none" stroke="' + lineCol + '" stroke-width="2" points="' + poly + '"/></svg>';
       const kpi = (l, v, c2) => '<div class="k"><span>' + E(l) + '</span><b class="' + (c2 || "") + '">' + E(v) + "</b></div>";
-      let h = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trading snapshot · ' + E(acc.name) + "</title><style>" +
+      let h = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trading snapshot · ' + E(tzState.allAcc ? "All accounts" : acc.name) + "</title><style>" +
         "body{margin:0;background:#F4F5FA;color:#1C1D33;font:14px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}.w{max-width:1100px;margin:0 auto;padding:28px 20px 60px}" +
         "h1{font-size:22px;margin:0}h2{font-size:16px;margin:0 0 12px}.sub{color:#858AA6;font-size:12.5px}.card{background:#fff;border:1px solid #E8E9F1;border-radius:12px;padding:18px 20px;margin-top:16px}" +
         ".ks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}.k{background:#fff;border:1px solid #E8E9F1;border-radius:12px;padding:14px 16px}.k span{display:block;color:#858AA6;font-size:12px}.k b{font-size:20px}" +
         ".pos{color:#12B76A}.neg{color:#F04438}table{width:100%;border-collapse:collapse;font-size:12.5px}th{text-align:left;color:#858AA6;font-weight:600;padding:8px 10px;border-bottom:1px solid #E8E9F1;background:#F8F8FC}td{padding:8px 10px;border-bottom:1px solid #E8E9F1;vertical-align:top}td.n,th.n{text-align:right}" +
         ".cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.cal div{border:1px solid #E8E9F1;border-radius:6px;min-height:46px;padding:4px 6px;font-size:11px}.cal .p{background:rgba(18,183,106,.12)}.cal .l{background:rgba(240,68,56,.10)}.cal .h{border:0;color:#858AA6;text-align:center;min-height:0}" +
+        ".fbk input,.fbk textarea,textarea.fb{width:100%;box-sizing:border-box;border:1px solid #DCDDE8;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;margin-top:6px;background:#FFFDF5}textarea.fb{min-height:34px;resize:vertical}td textarea.fb{min-width:200px;margin:0}" +
+        "#fbDl{margin-top:10px;background:#6C4CF5;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer}.day{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #F0F0F5}" +
         ".note{white-space:pre-wrap;background:#F8F8FC;border:1px solid #E8E9F1;border-radius:8px;padding:10px 12px;margin-top:6px}.ro{display:inline-block;background:#6C4CF5;color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:8px}" +
         "@media(max-width:760px){.ks{grid-template-columns:1fr 1fr}}</style></head><body><div class=\"w\">";
-      h += "<h1>" + E(acc.name) + ' <span class="ro">READ ONLY</span></h1><div class="sub">' + E(rangeLabel) + " · " + E(fmtDateOnly(m.sortedTrades[0].closeTime)) + " to " + E(fmtDateOnly(m.sortedTrades[m.sortedTrades.length - 1].closeTime)) + " · generated " + E(new Date().toLocaleString()) + " from TradeSave</div>";
+      h += "<h1>" + E(tzState.allAcc ? "All accounts" : acc.name) + ' <span class="ro">READ ONLY</span></h1><div class="sub">' + E(rangeLabel) + " · " + E(fmtDateOnly(m.sortedTrades[0].closeTime)) + " to " + E(fmtDateOnly(m.sortedTrades[m.sortedTrades.length - 1].closeTime)) + " · generated " + E(new Date().toLocaleString()) + " from TradeSave</div>";
       h += '<div class="ks">' + kpi("Net P&L", fmtMoney(m.netProfit, 2), cls(m.netProfit)) + kpi("Trades", fmtInt(m.total)) + kpi("Trade win %", fmtPct(m.winRate, 1)) + kpi("Profit factor", fmtNum(m.profitFactor, 2)) +
         kpi("Day win %", fmtPct(days.length ? dw / days.length : 0, 1)) + kpi("Avg win / loss", fmtMoney(m.avgWin, 2) + " / -" + fmtMoney(m.avgLoss, 2)) + kpi("Max drawdown", fmtMoney(m.maxDD, 2) + " (" + fmtPct(m.maxDDPct, 1) + ")") + kpi("TS Score", fmtNum(score, 1) + " / 100") + "</div>";
+      const snapId = tzUid();
+      h += '<div class="card fbk"><h2>Mentor feedback</h2><div class="sub" style="margin-bottom:10px">Write comments in the boxes on trading days and trades below. Your text autosaves in this browser. When done, click Download feedback and send the file back.</div>' +
+        '<input id="fbName" placeholder="Your name"><textarea id="fbGen" placeholder="General feedback"></textarea><button id="fbDl">Download feedback</button></div>';
       h += '<div class="card"><h2>Daily net cumulative P&amp;L</h2>' + svg + "</div>";
       // last 3 months calendar
       const byKey = new Map(days.map(d => [d.key, d]));
@@ -12941,21 +13002,23 @@
         store.playbooks.forEach(pb => { const b = bySetup.get(pb.name); h += "<tr><td><b>" + E(pb.name) + "</b>" + (pb.description ? '<div class="sub">' + E(pb.description) + "</div>" : "") + "</td><td>" + pb.rules.map(E).join("<br>") + '</td><td class="n">' + (b ? fmtInt(b.total) : 0) + '</td><td class="n">' + (b ? fmtPct(b.wins / b.total, 1) : "—") + '</td><td class="n ' + cls(b ? b.sum : 0) + '">' + E(fmtMoney(b ? b.sum : 0, 2)) + "</td></tr>"; });
         h += "</tbody></table></div>";
       }
-      if (o.journal) {
-        const jk = days.map(d => d.key).filter(k => store.journal[k] && store.journal[k].trim()).reverse();
-        if (jk.length) {
-          h += '<div class="card"><h2>Daily journal</h2>';
-          jk.slice(0, 120).forEach(k => { const b = byKey.get(k); h += '<div style="margin-bottom:14px"><b>' + E(tzLongDate(k)) + '</b> <span class="' + cls(b.sum) + '">' + E(fmtMoney(b.sum, 2)) + '</span> <span class="sub">· ' + fmtInt(b.total) + ' trades</span><div class="note">' + E(store.journal[k]) + "</div></div>"; });
-          h += "</div>";
-        }
+      {
+        const dk = days.slice(-90).reverse();
+        h += '<div class="card"><h2>Trading days</h2><div class="sub" style="margin-bottom:10px">Latest ' + dk.length + " days" + (days.length > dk.length ? " of " + fmtInt(days.length) : "") + "</div>";
+        dk.forEach(b => {
+          const k = b.key, jn = o.journal && store.journal[k] && store.journal[k].trim() ? store.journal[k] : "";
+          h += '<div class="day"><b>' + E(tzLongDate(k)) + '</b> <span class="' + cls(b.sum) + '">' + E(fmtMoney(b.sum, 2)) + '</span> <span class="sub">· ' + fmtInt(b.total) + " trades</span>" +
+            (jn ? '<div class="note">' + E(jn) + "</div>" : "") + '<textarea class="fb" data-day="' + E(k) + '" placeholder="Comment on this day"></textarea></div>';
+        });
+        h += "</div>";
       }
       if (o.trades) {
         const st = m.sortedTrades, last = st.slice(Math.max(0, st.length - 300)).reverse();
-        h += '<div class="card"><h2>Latest ' + fmtInt(last.length) + " trades" + (st.length > last.length ? ' <span class="sub">of ' + fmtInt(st.length) + "</span>" : "") + '</h2><div style="overflow-x:auto"><table><thead><tr><th>Close</th><th>Symbol</th><th>Side</th><th>Playbook</th>' + (o.tradeNotes ? "<th>Tags / mistakes</th><th>Notes</th>" : "") + '<th class="n">Volume</th><th class="n">Net P&amp;L</th></tr></thead><tbody>';
+        h += '<div class="card"><h2>Latest ' + fmtInt(last.length) + " trades" + (st.length > last.length ? ' <span class="sub">of ' + fmtInt(st.length) + "</span>" : "") + '</h2><div style="overflow-x:auto"><table><thead><tr><th>Close</th><th>Symbol</th><th>Side</th><th>Playbook</th>' + (o.tradeNotes ? "<th>Tags / mistakes</th><th>Notes</th>" : "") + '<th class="n">Volume</th><th class="n">Net P&amp;L</th><th>Mentor comment</th></tr></thead><tbody>';
         last.forEach(tr => {
           h += "<tr><td>" + E(fmtDate(tr.closeTime)) + "</td><td>" + E(tr.symbol) + "</td><td>" + E(tr.direction) + "</td><td>" + E(tr.setup || "—") + "</td>" +
             (o.tradeNotes ? "<td>" + E((tr.tags || []).join(", ")) + ((tr.mistakes || []).length ? '<div class="neg">' + E(tr.mistakes.join(", ")) + "</div>" : "") + "</td><td>" + (tr.note ? '<div style="white-space:pre-wrap;max-width:320px">' + E(tr.note) + "</div>" : "") + "</td>" : "") +
-            '<td class="n">' + E(fmtNum(tr.volume, 2)) + '</td><td class="n ' + cls(tr.netProfit) + '">' + E(fmtMoney(tr.netProfit, 2)) + "</td></tr>";
+            '<td class="n">' + E(fmtNum(tr.volume, 2)) + '</td><td class="n ' + cls(tr.netProfit) + '">' + E(fmtMoney(tr.netProfit, 2)) + '</td><td><textarea class="fb" rows="1" data-t="' + E(String(tr.ticket)) + '" placeholder="Comment"></textarea></td></tr>';
         });
         h += "</tbody></table></div></div>";
       }
@@ -12964,8 +13027,631 @@
         store.notes.slice().sort((a, b) => b.updatedAt - a.updatedAt).forEach(n => { h += '<div style="margin-bottom:14px"><b>' + E(n.title) + '</b> <span class="sub">' + E(new Date(n.updatedAt).toLocaleDateString()) + '</span><div class="note">' + E(n.body) + "</div></div>"; });
         h += "</div>";
       }
-      h += '<div class="sub" style="margin-top:24px;text-align:center">Read-only snapshot. Figures reflect the data at the time it was generated.</div></div></body></html>';
+      h += '<div class="sub" style="margin-top:24px;text-align:center">Snapshot of the data at the time it was generated. Only your comments are editable.</div></div><script>(function(){var SNAP="' + snapId + '",K="tsfb:"+SNAP,Q="textarea.fb,#fbName,#fbGen";function key(t){return t.id||(t.dataset.day?"d:"+t.dataset.day:"t:"+t.dataset.t)}try{var s=JSON.parse(localStorage.getItem(K)||"{}");document.querySelectorAll(Q).forEach(function(t){if(s[key(t)])t.value=s[key(t)]})}catch(e){}document.addEventListener("input",function(e){if(!e.target.matches(Q))return;try{var s={};document.querySelectorAll(Q).forEach(function(t){if(t.value)s[key(t)]=t.value});localStorage.setItem(K,JSON.stringify(s))}catch(x){}});document.getElementById("fbDl").onclick=function(){var o={type:"tradesave-mentor-feedback",version:1,snapshot:SNAP,mentor:document.getElementById("fbName").value.trim(),general:document.getElementById("fbGen").value.trim(),days:{},trades:{}},n=0;document.querySelectorAll("textarea.fb").forEach(function(t){var v=t.value.trim();if(!v)return;n++;if(t.dataset.day)o.days[t.dataset.day]=v;else o.trades[t.dataset.t]=v});if(!n&&!o.general){alert("Write at least one comment first.");return}var b=new Blob([JSON.stringify(o,null,1)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="TradeSave-feedback-"+(o.mentor||"mentor").replace(/[^\\w-]+/g,"_")+".json";document.body.appendChild(a);a.click();a.remove()}})();<\/script></body></html>';
       return h;
+    }
+
+    // ===================== TZ: all accounts, manual trades, more reports, mentor round-trip, university, settings =====================
+    // ---------- scope: one account or all ----------
+    function tzBase() { return tzState.allAcc ? state.trades : accountTrades(); }
+    function tzStartBal() {
+      if (tzState.allAcc) return state.accounts.reduce((s, a) => s + (+a.startingBalance || 0), 0);
+      const a = currentAccount();
+      return a ? (+a.startingBalance || 0) : 0;
+    }
+    function tzAccName(id) { const a = state.accounts.find(x => x.id === id); return a ? a.name : id; }
+
+    // Save edits made in the TZ view. Works for trades of any account (All accounts view).
+    async function tzSaveTrade(tr, details) {
+      Object.assign(tr, details);
+      invalidateTradeCache();
+      noteImportTouched(tr);
+      await idbPutAll(state.db, "trades", [tr]);
+      toast("Saved", "Trade updated", "success", 2000);
+      renderTZ();
+    }
+
+    // ---------- add / edit trade ----------
+    function tzDtLocal(ms) {
+      const d = new Date(ms), p = x => String(x).padStart(2, "0");
+      return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+    }
+    function tzAddTradeChooser() {
+      const box = tzH("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:min(520px,80vw)" });
+      const opt = (title, text, fn) => {
+        const b = tzH("button", { class: "tz-card tz-pb-card", style: "text-align:left;font-family:inherit", onClick: () => { closeModal(); fn(); } });
+        b.innerHTML = '<div class="tz-pb-name">' + escapeHtml(title) + '</div><div class="tz-pb-desc">' + escapeHtml(text) + "</div>";
+        return b;
+      };
+      box.appendChild(opt("Import a file", "MT5 trade history, Strategy Tester report (HTML / XLSX) or Balance/Equity CSV.", () => triggerImport()));
+      box.appendChild(opt("Add manually", "Enter one trade by hand, for trades not in a file.", () => tzTradeForm(null)));
+      showModal("Add trades", box);
+    }
+    function tzTradeForm(existing) {
+      if (!existing && tzState.allAcc && !state.accounts.length) return;
+      const f = tzH("div", { class: "tz-form", style: "min-width:min(620px,86vw)" });
+      const grid = tzH("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:4px 14px" });
+      const field = (label, input, full) => { const w = tzH("div", full ? { style: "grid-column:1 / -1" } : {}); w.appendChild(tzH("label", { class: "tz-label", text: label })); w.appendChild(input); grid.appendChild(w); return input; };
+      const inp = (type, value, attrs) => tzH("input", Object.assign({ class: "tz-input", type, value: value === undefined || value === null ? "" : String(value), style: "width:100%" }, attrs || {}));
+      const e = existing || {};
+      let accSel = null;
+      if (!existing && tzState.allAcc) {
+        accSel = tzH("select", { class: "tz-select", style: "width:100%" });
+        state.accounts.forEach(a => accSel.appendChild(tzH("option", { value: a.id, text: a.name })));
+        accSel.value = state.activeAccountId || state.accounts[0].id;
+        field("Account", accSel, true);
+      }
+      const sym = field("Symbol", inp("text", e.symbol || "", { placeholder: "EURUSD" }));
+      const side = tzH("select", { class: "tz-select", style: "width:100%" });
+      [["Long", "Long (buy)"], ["Short", "Short (sell)"]].forEach(([v, l]) => side.appendChild(tzH("option", { value: v, text: l })));
+      side.value = e.direction || "Long";
+      field("Side", side);
+      const now = Date.now();
+      const ot = field("Open time", inp("datetime-local", tzDtLocal(e.openTime || now - 3600000)));
+      const ct = field("Close time", inp("datetime-local", tzDtLocal(e.closeTime || now)));
+      const op = field("Entry price", inp("number", e.openPrice, { step: "any" }));
+      const cp = field("Exit price", inp("number", e.closePrice, { step: "any" }));
+      const vol = field("Volume (lots)", inp("number", e.volume !== undefined ? e.volume : 0.1, { step: "any", min: "0" }));
+      const pr = field("Gross profit (before costs)", inp("number", e.profit !== undefined ? e.profit : "", { step: "any", placeholder: "e.g. 42.50 or -18" }));
+      const cm = field("Commission (negative = cost)", inp("number", e.commission || 0, { step: "any" }));
+      const sw = field("Swap", inp("number", e.swap || 0, { step: "any" }));
+      const sl = field("Stop loss price", inp("number", e.stopLoss || "", { step: "any" }));
+      const tp = field("Take profit price", inp("number", e.takeProfit || "", { step: "any" }));
+      const pb = tzH("select", { class: "tz-select", style: "width:100%" });
+      pb.appendChild(tzH("option", { value: "", text: "No playbook" }));
+      tzAcc().playbooks.forEach(p => pb.appendChild(tzH("option", { value: p.name, text: p.name })));
+      if (e.setup && !tzAcc().playbooks.some(p => p.name === e.setup)) pb.appendChild(tzH("option", { value: e.setup, text: e.setup }));
+      pb.value = e.setup || "";
+      field("Playbook", pb);
+      const tags = field("Tags (comma separated)", inp("text", (e.tags || []).join(", ")));
+      const note = tzH("textarea", { class: "tz-textarea", style: "min-height:80px" });
+      note.value = e.note || "";
+      field("Notes", note, true);
+      f.appendChild(grid);
+      const err = tzH("div", { class: "tz-sub tz-neg", style: "margin-top:8px" });
+      f.appendChild(err);
+      const actions = tzH("div", { style: "display:flex;justify-content:flex-end;gap:8px;margin-top:14px" });
+      actions.appendChild(tzH("button", { class: "tz-btn", text: "Cancel", onClick: () => closeModal() }));
+      actions.appendChild(tzH("button", {
+        class: "tz-btn primary", text: existing ? "Save changes" : "Add trade", onClick: async () => {
+          const o = new Date(ot.value).getTime(), c = new Date(ct.value).getTime();
+          if (!sym.value.trim()) { err.textContent = "Enter a symbol."; return; }
+          if (!isFinite(o) || !isFinite(c)) { err.textContent = "Enter open and close times."; return; }
+          if (c < o) { err.textContent = "Close time is before open time."; return; }
+          if (pr.value === "" || !isFinite(+pr.value)) { err.textContent = "Enter the gross profit (use a negative number for a loss)."; return; }
+          const profit = +pr.value, commission = +cm.value || 0, swap = +sw.value || 0;
+          const data = {
+            symbol: sym.value.trim(), direction: side.value, openTime: o, closeTime: c,
+            openPrice: +op.value || 0, closePrice: +cp.value || 0, volume: +vol.value || 0,
+            profit, commission, swap, netProfit: profit + commission + swap,
+            stopLoss: +sl.value || 0, takeProfit: +tp.value || 0, setup: pb.value || "",
+            tags: tags.value.split(",").map(s => s.trim()).filter(Boolean), note: note.value,
+          };
+          if (existing) {
+            closeModal();
+            await tzSaveTrade(existing, data);
+            tzCloseDrawer();
+          } else {
+            const accountId = accSel ? accSel.value : state.activeAccountId;
+            const tr = Object.assign({ accountId, ticket: "M-" + tzUid(), magicNumber: "", comment: "Manual entry", strategyId: null }, data);
+            state.trades.push(tr);
+            invalidateTradeCache();
+            noteImportTouched(tr);
+            await idbPutAll(state.db, "trades", [tr]);
+            closeModal();
+            toast("Trade added", tr.symbol + " " + tr.direction + " · " + fmtMoney(tr.netProfit, 2, true), "success", 3000);
+            renderTZ();
+          }
+        }
+      }));
+      f.appendChild(actions);
+      showModal(existing ? "Edit trade" : "Add trade manually", f, { wide: true });
+      setTimeout(() => sym.focus(), 50);
+    }
+
+    // ---------- per-trade insights ----------
+    function tzTradeInsights(tr) {
+      const base = tzBase();
+      const m = computeMetrics(base, tzStartBal());
+      const out = [];
+      const st = m.sortedTrades;
+      const idx = st.indexOf(tr);
+      // hold time vs typical
+      let hw = 0, hwn = 0, hl = 0, hln = 0, vol = 0;
+      for (const t2 of base) { const d = t2.closeTime - t2.openTime; vol += t2.volume || 0; if (t2.netProfit > 0) { hw += d; hwn++; } else if (t2.netProfit < 0) { hl += d; hln++; } }
+      const dur = tr.closeTime - tr.openTime;
+      if (tr.netProfit < 0 && hln >= 5 && dur > 1.5 * hl / hln) out.push(["neg", "Held " + fmtNum(dur / (hl / hln), 1) + "× longer than your average loser (" + fmtDuration(hl / hln) + ")."]);
+      if (tr.netProfit > 0 && hwn >= 5 && dur < 0.5 * hw / hwn) out.push(["neu", "Closed faster than half your average winner hold (" + fmtDuration(hw / hwn) + "). Check if you cut it early."]);
+      // size
+      const avgVol = base.length ? vol / base.length : 0;
+      if (avgVol > 0 && tr.volume > 1.5 * avgVol) out.push(["neg", "Position size " + fmtNum(tr.volume / avgVol, 1) + "× your average (" + fmtNum(avgVol, 2) + " lots)."]);
+      // result vs typical
+      if (tr.netProfit < 0 && m.avgLoss > 0 && -tr.netProfit > 2 * m.avgLoss) out.push(["neg", "Loss is " + fmtNum(-tr.netProfit / m.avgLoss, 1) + "× your average loss."]);
+      if (tr.netProfit > 0 && m.avgWin > 0 && tr.netProfit > 2 * m.avgWin) out.push(["pos", "Win is " + fmtNum(tr.netProfit / m.avgWin, 1) + "× your average win."]);
+      // losing streak before it
+      if (idx > 0) {
+        let k = 0;
+        for (let i = idx - 1; i >= 0 && st[i].netProfit < 0; i--) k++;
+        if (k >= 2) out.push(["neg", "Taken after " + k + " losses in a row. Watch for revenge trading."]);
+      }
+      // position in the day
+      const dk = dayKeyOf(tr.closeTime);
+      const dayB = cachedBucketBy(base, "day", x => dayKeyOf(x.closeTime)).find(b => b.key === dk);
+      if (dayB && dayB.total > 1) {
+        const order = dayB.trades.slice().sort((a, b) => a.openTime - b.openTime).indexOf(tr) + 1;
+        out.push(["neu", "Trade " + order + " of " + dayB.total + " that day (day net " + fmtMoney(dayB.sum, 2) + ")."]);
+      }
+      // the hour's record
+      const p = tradeTimeParts(base);
+      const h = new Date(tr.closeTime).getHours();
+      let hs = 0, hn = 0;
+      for (let i = 0; i < base.length; i++) if (p.hour[i] === h) { hs += base[i].netProfit; hn++; }
+      if (hn >= 10) out.push([hs < 0 ? "neg" : "pos", "Your " + String(h).padStart(2, "0") + ":00 hour: " + fmtMoney(hs, 0, true) + " over " + fmtInt(hn) + " trades."]);
+      if (tr.mistakes && tr.mistakes.length) out.push(["neg", "Marked mistakes: " + tr.mistakes.join(", ") + "."]);
+      return out;
+    }
+
+    // ---------- CSV export ----------
+    function tzExportCSV(rows, name) {
+      const q = v => { const s = v === null || v === undefined ? "" : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const head = ["Ticket", "Account", "Symbol", "Side", "Open time", "Close time", "Entry price", "Exit price", "Volume", "Gross profit", "Commission", "Swap", "Net P&L", "Playbook", "Tags", "Mistakes", "Rating", "Planned risk", "Profit target", "R", "Notes"];
+      const lines = [head.join(",")];
+      for (const tr of rows) {
+        const r = tzTradeR(tr);
+        lines.push([tr.ticket, tzAccName(tr.accountId), tr.symbol, tr.direction, fmtDate(tr.openTime), fmtDate(tr.closeTime), tr.openPrice, tr.closePrice, tr.volume, tr.profit, tr.commission, tr.swap,
+          Math.round(tr.netProfit * 100) / 100, tr.setup || "", (tr.tags || []).join("; "), (tr.mistakes || []).join("; "), tr.rating || "", tr.plannedRisk || "", tr.plannedTarget || "", r === null ? "" : r.toFixed(2), tr.note || ""].map(q).join(","));
+      }
+      const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name || ("TradeSave-trades-" + tzTodayKey() + ".csv");
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+
+    // ---------- more reports ----------
+    const TZ_CMP_DEFAULT = () => ({ playbook: "all", side: "all", symbol: "all", weekday: "all", tag: "all", mistake: "all", result: "all" });
+    function tzCmpFilter(trades, g) {
+      const p = g.weekday !== "all" ? tradeTimeParts(trades) : null;
+      const out = [];
+      for (let i = 0; i < trades.length; i++) {
+        const tr = trades[i];
+        if (g.playbook !== "all" && (g.playbook === "__none__" ? !!tr.setup : tr.setup !== g.playbook)) continue;
+        if (g.side !== "all" && tr.direction !== g.side) continue;
+        if (g.symbol !== "all" && tr.symbol !== g.symbol) continue;
+        if (p && p.wday[i] !== +g.weekday) continue;
+        if (g.tag !== "all" && !(tr.tags || []).includes(g.tag)) continue;
+        if (g.mistake !== "all" && (g.mistake === "__none__" ? (tr.mistakes || []).length : !(tr.mistakes || []).includes(g.mistake))) continue;
+        if (g.result !== "all" && !(g.result === "win" ? tr.netProfit > 0 : tr.netProfit < 0)) continue;
+        out.push(tr);
+      }
+      return out;
+    }
+    function tzDrawdownPeriods(m) {
+      const bc = m.balanceCurve, out = [];
+      let peak = bc[0].balance, peakT = bc[0].time, cur = null;
+      for (let i = 1; i < bc.length; i++) {
+        const p = bc[i];
+        if (p.balance >= peak) {
+          if (cur) { cur.recoverT = p.time; out.push(cur); cur = null; }
+          peak = p.balance; peakT = p.time;
+        } else {
+          const dd = peak - p.balance;
+          if (!cur) cur = { peakT, peak, troughT: p.time, depth: dd, recoverT: null, trades: 0 };
+          cur.trades++;
+          if (dd > cur.depth) { cur.depth = dd; cur.troughT = p.time; }
+        }
+      }
+      if (cur) out.push(cur);
+      return out.sort((a, b) => b.depth - a.depth);
+    }
+    function tzWeekKey(key) {
+      const d = tzKeyToDate(key);
+      const dow = (d.getDay() + 6) % 7; // Monday = 0
+      d.setDate(d.getDate() - dow);
+      return dayKeyOf(d.getTime());
+    }
+    function tzPeriodRows(days, keyOf) {
+      const map = new Map();
+      for (const d of days) {
+        const k = keyOf(d.key);
+        let r = map.get(k);
+        if (!r) { r = { key: k, sum: 0, n: 0, w: 0, days: 0, green: 0, best: null, worst: null }; map.set(k, r); }
+        r.sum += d.sum; r.n += d.total; r.w += d.wins; r.days++; if (d.sum > 0) r.green++;
+        if (!r.best || d.sum > r.best.sum) r.best = d; if (!r.worst || d.sum < r.worst.sum) r.worst = d;
+      }
+      return Array.from(map.values()).sort((a, b) => a.key < b.key ? 1 : -1);
+    }
+    function tzReportMore(c, tab, trades) {
+      const days = tzDays(trades);
+      if (tab === "compare") {
+        tzState.cmp = tzState.cmp || [Object.assign(TZ_CMP_DEFAULT(), { side: "Long" }), Object.assign(TZ_CMP_DEFAULT(), { side: "Short" })];
+        const pbs = tzAcc().playbooks.map(p => p.name), syms = tzDistinct("symbol").slice(0, 200), tags = tzDistinct("tags"), mis = tzDistinct("mistakes");
+        const groups = tzState.cmp.map(g => tzCmpFilter(trades, g));
+        const ms = groups.map(g => g.length ? computeMetrics(g, 0) : null);
+        const colors = [cssVar("--accent", "#6C4CF5"), cssVar("--amber", "#F79009")];
+        const grid = tzH("div", { class: "tz-grid tz-g2 tz-mb" });
+        tzState.cmp.forEach((g, gi) => {
+          const card = tzCard("Group " + (gi === 0 ? "A" : "B"));
+          card.querySelector(".tz-card-t").insertAdjacentHTML("afterbegin", '<span class="tz-dot" style="background:' + colors[gi] + '"></span>');
+          const box = tzH("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px" });
+          const sel = (key, opts) => {
+            const s = tzH("select", { class: "tz-select", style: "width:100%" });
+            opts.forEach(([v, l]) => s.appendChild(tzH("option", { value: v, text: l })));
+            s.value = g[key];
+            s.addEventListener("change", () => { g[key] = s.value; renderTZ(); });
+            box.appendChild(s);
+          };
+          sel("playbook", [["all", "Any playbook"], ["__none__", "No playbook"]].concat(pbs.map(x => [x, x])));
+          sel("side", [["all", "Any side"], ["Long", "Long"], ["Short", "Short"]]);
+          sel("symbol", [["all", "Any symbol"]].concat(syms.map(x => [x, x])));
+          sel("weekday", [["all", "Any day"]].concat([1, 2, 3, 4, 5, 6, 0].map(i => [String(i), TZ_DOW_LONG[i]])));
+          sel("tag", [["all", "Any tag"]].concat(tags.map(x => [x, x])));
+          sel("mistake", [["all", "Any mistakes"], ["__none__", "No mistakes"]].concat(mis.map(x => [x, x])));
+          card.appendChild(box);
+          card.appendChild(tzH("div", { class: "tz-sub", style: "margin-top:10px", text: fmtInt(groups[gi].length) + " trades" }));
+          grid.appendChild(card);
+        });
+        c.appendChild(grid);
+        const rows = [["Trades", m => fmtInt(m.total)], ["Net P&L", m => fmtMoney(m.netProfit, 2)], ["Win %", m => fmtPct(m.winRate, 1)], ["Profit factor", m => fmtNum(m.profitFactor, 2)],
+          ["Expectancy per trade", m => fmtMoney(m.netProfit / m.total, 2)], ["Average winner", m => fmtMoney(m.avgWin, 2)], ["Average loser", m => "-" + fmtMoney(m.avgLoss, 2)],
+          ["Largest win", m => fmtMoney(m.bestTrade, 2)], ["Largest loss", m => fmtMoney(m.worstTrade, 2)], ["Max drawdown", m => fmtMoney(m.maxDD, 2)],
+          ["Average hold", m => fmtDuration(m.avgHoldingMs)], ["Max losing streak", m => fmtInt(m.maxLossStreak)], ["TS Score", m => fmtNum(tradeSaveScore(m).score, 1)]];
+        const g2 = tzH("div", { class: "tz-grid tz-g-dash3" });
+        const tcard = tzCard("Side by side");
+        const tb = tzH("table", { class: "tz-stats-table" });
+        tb.innerHTML = '<tr><td></td><td style="color:' + colors[0] + '">A</td><td style="color:' + colors[1] + '">B</td></tr>' +
+          rows.map(([l, f]) => "<tr><td>" + escapeHtml(l) + "</td><td>" + (ms[0] ? escapeHtml(f(ms[0])) : "—") + "</td><td>" + (ms[1] ? escapeHtml(f(ms[1])) : "—") + "</td></tr>").join("");
+        tb.querySelectorAll("tr td:nth-child(2)").forEach(td => td.style.textAlign = "right");
+        tcard.appendChild(tb);
+        g2.appendChild(tcard);
+        const lc = tzCard("Cumulative P&L by trade number");
+        const ch = tzChartBox("md");
+        lc.appendChild(ch.wrap);
+        g2.appendChild(lc);
+        c.appendChild(g2);
+        const series = ms.map((m, i) => {
+          if (!m) return null;
+          const st = m.sortedTrades;
+          let run = 0;
+          const ys = new Float64Array(st.length + 1);
+          for (let k = 0; k < st.length; k++) ys[k + 1] = (run += st[k].netProfit);
+          return { data: buildCurve(st.length + 1, k => k, k => ys[k], 3000), color: colors[i], label: i === 0 ? "A" : "B", tipFormat: y => fmtMoney(y, 2, true) };
+        }).filter(Boolean);
+        if (series.length) drawLineChart(ch.canvas, series, { xFormat: x => "#" + Math.round(x), yFormat: y => fmtMoney(y, 0), referenceLines: [{ value: 0, label: "0" }] });
+        return;
+      }
+      if (tab === "drawdown") {
+        const m = computeMetrics(trades, tzStartBal());
+        const periods = tzDrawdownPeriods(m);
+        const row = tzH("div", { class: "tz-grid tz-g4 tz-mb" });
+        const longest = periods.reduce((b, p) => { const d = (p.recoverT || m.balanceCurve[m.balanceCurve.length - 1].time) - p.peakT; return d > b ? d : b; }, 0);
+        const open = periods.find(p => !p.recoverT);
+        row.appendChild(tzStatCard("Max drawdown", "", '<span class="tz-neg">' + escapeHtml(fmtMoney(-m.maxDD, 2)) + "</span>", "", '<div class="tz-sub" style="margin-top:8px">' + fmtPct(m.maxDDPct, 2) + " of peak</div>"));
+        row.appendChild(tzStatCard("Drawdown periods", "Times the balance fell below a previous high", fmtInt(periods.length)));
+        row.appendChild(tzStatCard("Longest underwater", "Peak to recovery (or to now)", fmtDuration(longest)));
+        row.appendChild(tzStatCard("Current drawdown", "", open ? '<span class="tz-neg">' + escapeHtml(fmtMoney(-(open.peak - m.finalBalance), 2)) + "</span>" : '<span class="tz-pos">At a high</span>'));
+        c.appendChild(row);
+        const card = tzCard("Underwater curve", "Distance below the running balance high");
+        const ch = tzChartBox();
+        card.appendChild(ch.wrap);
+        card.classList.add("tz-mb");
+        c.appendChild(card);
+        drawLineChart(ch.canvas, [{ data: metricsCurves(m).negDd, color: cssVar("--red", "#F04438"), fill: true, label: "Drawdown", tipFormat: y => fmtMoney(y, 2) }], { xFormat: x => fmtAxisDate(x), yFormat: y => fmtMoney(y, 0) });
+        const tc = tzH("div", { class: "tz-card flush" });
+        const tb = tzH("table", { class: "tz-table" });
+        let h = '<thead><tr><th>#</th><th>Peak</th><th>Trough</th><th>Recovered</th><th class="num">Depth</th><th class="num">% of peak</th><th class="num">Trades</th><th class="num">Duration</th></tr></thead><tbody>';
+        periods.slice(0, 15).forEach((p, i) => {
+          const end = p.recoverT || m.balanceCurve[m.balanceCurve.length - 1].time;
+          h += "<tr><td>" + (i + 1) + "</td><td>" + escapeHtml(fmtDate(p.peakT)) + "</td><td>" + escapeHtml(fmtDate(p.troughT)) + "</td><td>" + (p.recoverT ? escapeHtml(fmtDate(p.recoverT)) : '<span class="tz-neg">Not yet</span>') +
+            '</td><td class="num tz-neg">' + escapeHtml(fmtMoney(-p.depth, 2)) + '</td><td class="num">' + fmtPct(p.peak ? p.depth / Math.abs(p.peak) : 0, 2) + '</td><td class="num">' + fmtInt(p.trades) + '</td><td class="num">' + fmtDuration(end - p.peakT) + "</td></tr>";
+        });
+        tb.innerHTML = h + "</tbody>";
+        const w = tzH("div", { style: "overflow-x:auto" }); w.appendChild(tb); tc.appendChild(w);
+        c.appendChild(tc);
+        return;
+      }
+      if (tab === "periods") {
+        const g = tzH("div", { class: "tz-grid tz-g2" });
+        [["Weeks", tzPeriodRows(days, tzWeekKey), k => "Week of " + k], ["Months", tzPeriodRows(days, k => k.slice(0, 7)), k => TZ_MONTHS[+k.slice(5, 7) - 1] + " " + k.slice(0, 4)]].forEach(([title, list, lab]) => {
+          const card = tzH("div", { class: "tz-card flush" });
+          card.appendChild(tzH("div", { class: "tz-card-t", style: "padding:16px 18px 0", text: title }));
+          const tb = tzH("table", { class: "tz-table", style: "margin-top:10px" });
+          let h = '<thead><tr><th>Period</th><th class="num">Net P&amp;L</th><th class="num">Trades</th><th class="num">Win %</th><th class="num">Green days</th><th class="num">Best day</th></tr></thead><tbody>';
+          list.slice(0, 104).forEach(r => { h += "<tr><td>" + escapeHtml(lab(r.key)) + '</td><td class="num ' + tzMoneyCls(r.sum) + '"><b>' + escapeHtml(fmtMoney(r.sum, 2)) + '</b></td><td class="num">' + fmtInt(r.n) + '</td><td class="num">' + fmtPct(r.n ? r.w / r.n : 0, 1) + '</td><td class="num">' + r.green + " / " + r.days + '</td><td class="num">' + escapeHtml(fmtMoney(r.best.sum, 2)) + "</td></tr>"; });
+          tb.innerHTML = h + "</tbody>";
+          const w = tzH("div", { style: "overflow-x:auto;max-height:640px;overflow-y:auto" }); w.appendChild(tb); card.appendChild(w);
+          g.appendChild(card);
+        });
+        c.appendChild(g);
+        return;
+      }
+      if (tab === "yearly") {
+        const byKey = new Map(days.map(d => [d.key, d]));
+        let maxAbs = 0; days.forEach(d => { if (Math.abs(d.sum) > maxAbs) maxAbs = Math.abs(d.sum); });
+        const years = Array.from(new Set(days.map(d => d.key.slice(0, 4)))).sort().reverse().slice(0, 6);
+        years.forEach(y => {
+          let ys = 0; days.forEach(d => { if (d.key.startsWith(y)) ys += d.sum; });
+          const card = tzCard(y, null, tzH("b", { class: tzMoneyCls(ys), text: fmtMoney(ys, 2) }));
+          card.classList.add("tz-mb");
+          const grid = tzH("div", { class: "tz-year" });
+          for (let mo = 0; mo < 12; mo++) {
+            const mbox = tzH("div", { class: "tz-ymonth" });
+            const dim = new Date(+y, mo + 1, 0).getDate(), off = new Date(+y, mo, 1).getDay();
+            let msum = 0;
+            let cells = "";
+            for (let i = 0; i < off; i++) cells += "<i></i>";
+            for (let d = 1; d <= dim; d++) {
+              const k = y + (mo + 1 < 10 ? "-0" : "-") + (mo + 1) + (d < 10 ? "-0" : "-") + d, b = byKey.get(k);
+              if (b) msum += b.sum;
+              const a = b && maxAbs ? Math.max(0.18, Math.min(1, Math.abs(b.sum) / maxAbs)) : 0;
+              const bg = b ? (b.sum > 0 ? "rgba(18,183,106," + a.toFixed(2) + ")" : b.sum < 0 ? "rgba(240,68,56," + a.toFixed(2) + ")" : "var(--tz-gray)") : "";
+              cells += '<i class="' + (b ? "has" : "") + '" data-k="' + k + '" title="' + escapeHtml(tzLongDate(k) + (b ? " · " + fmtMoney(b.sum, 2) + " · " + b.total + " trades" : "")) + '"' + (bg ? ' style="background:' + bg + '"' : "") + "></i>";
+            }
+            mbox.innerHTML = '<div class="tz-ymonth-h"><span>' + TZ_MONTHS[mo].slice(0, 3) + '</span><b class="' + tzMoneyCls(msum) + '">' + (msum ? escapeHtml(fmtMoney(msum, 0)) : "") + '</b></div><div class="tz-ygrid">' + cells + "</div>";
+            grid.appendChild(mbox);
+          }
+          grid.addEventListener("click", e => { const i = e.target.closest("i.has"); if (i) tzGo("journal", { focusDay: i.dataset.k }); });
+          card.appendChild(grid);
+          c.appendChild(card);
+        });
+        return;
+      }
+      if (tab === "playbooks") {
+        const store = tzAcc();
+        const buckets = cachedBucketBy(trades, "setup", x => x.setup || "Unassigned").slice().sort((a, b) => b.sum - a.sum);
+        if (!buckets.length) return tzNoTrades(c);
+        const tc = tzH("div", { class: "tz-card flush" });
+        const tb = tzH("table", { class: "tz-table" });
+        let h = '<thead><tr><th>Playbook</th><th class="num">Trades</th><th class="num">Win %</th><th class="num">Net P&amp;L</th><th class="num">Profit factor</th><th class="num">Expectancy</th><th class="num">Avg R</th><th class="num">Rules followed</th></tr></thead><tbody>';
+        buckets.forEach(b => {
+          const pb = store.playbooks.find(p => p.name === b.key);
+          let gp = 0, gl = 0, rs = 0, rn = 0, fr = 0, frn = 0;
+          for (const tr of b.trades) {
+            if (tr.netProfit > 0) gp += tr.netProfit; else gl -= tr.netProfit;
+            const r = tzTradeR(tr); if (r !== null) { rs += r; rn++; }
+            if (pb && pb.rules.length) { fr += Math.min(pb.rules.length, (tr.rulesFollowed || []).length) / pb.rules.length; frn++; }
+          }
+          h += "<tr><td><b>" + escapeHtml(b.key === "Unassigned" ? "No playbook" : b.key) + "</b>" + (b.key !== "Unassigned" && !pb ? ' <span class="tz-pill">tag only</span>' : "") + '</td><td class="num">' + fmtInt(b.total) + '</td><td class="num">' + fmtPct(b.wins / b.total, 1) + '</td><td class="num ' + tzMoneyCls(b.sum) + '"><b>' + escapeHtml(fmtMoney(b.sum, 2)) + '</b></td><td class="num">' + fmtNum(gl > 0 ? gp / gl : (gp > 0 ? Infinity : 0), 2) +
+            '</td><td class="num">' + escapeHtml(fmtMoney(b.sum / b.total, 2)) + '</td><td class="num">' + (rn ? fmtNum(rs / rn, 2) + "R" : "—") + '</td><td class="num">' + (frn ? fmtPct(fr / frn, 0) : "—") + "</td></tr>";
+        });
+        tb.innerHTML = h + "</tbody>";
+        const w = tzH("div", { style: "overflow-x:auto" }); w.appendChild(tb); tc.appendChild(w);
+        c.appendChild(tc);
+      }
+    }
+
+    // ---------- Mentor mode page ----------
+    function tzMentorFeedback() {
+      const s = tzAcc();
+      s.mentor = s.mentor || { feedback: [] };
+      return s.mentor;
+    }
+    function tzMentorForDay(key) {
+      const out = [];
+      for (const fb of tzMentorFeedback().feedback) if (fb.days && fb.days[key]) out.push({ who: fb.mentor || "Mentor", text: fb.days[key], at: fb.receivedAt });
+      return out;
+    }
+    function tzMentorForTrade(tr) {
+      const out = [];
+      for (const fb of tzMentorFeedback().feedback) if (fb.trades && fb.trades[tr.ticket]) out.push({ who: fb.mentor || "Mentor", text: fb.trades[tr.ticket], at: fb.receivedAt });
+      return out;
+    }
+    function tzMentorBlock(items) {
+      const box = tzH("div", { class: "tz-mentor" });
+      items.forEach(it => {
+        const d = tzH("div", { class: "tz-mentor-item" });
+        d.innerHTML = '<div class="tz-mentor-who">💬 ' + escapeHtml(it.who) + ' <span class="tz-sub">' + escapeHtml(new Date(it.at).toLocaleDateString()) + "</span></div>";
+        d.appendChild(tzH("div", { style: "white-space:pre-wrap", text: it.text }));
+        box.appendChild(d);
+      });
+      return box;
+    }
+    function tzImportFeedback(file) {
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const j = JSON.parse(r.result);
+          if (!j || j.type !== "tradesave-mentor-feedback") throw new Error("This is not a TradeSave mentor feedback file.");
+          const days = j.days || {}, trades = j.trades || {};
+          const n = Object.keys(days).length + Object.keys(trades).length + (j.general ? 1 : 0);
+          if (!n) throw new Error("The feedback file has no comments.");
+          tzMentorFeedback().feedback.push({ id: tzUid(), mentor: String(j.mentor || "Mentor").slice(0, 80), general: String(j.general || ""), days, trades, snapshot: j.snapshot || "", receivedAt: Date.now() });
+          tzSave();
+          toast("Mentor feedback", "Imported " + n + " comment(s) from " + (j.mentor || "your mentor") + ".", "success", 5000);
+          renderTZ();
+        } catch (e) { toast("Mentor feedback", e.message, "error", 6000); }
+      };
+      r.readAsText(file);
+    }
+    function tzPageMentor(c) {
+      const fbs = tzMentorFeedback().feedback;
+      const g = tzH("div", { class: "tz-grid tz-g2 tz-mb" });
+      const share = tzCard("1. Share a snapshot with your mentor");
+      share.appendChild(tzH("div", { class: "tz-sub", style: "line-height:1.6;margin-bottom:10px", text: "Download one read-only page with your stats, curve, calendar, playbooks, journal and trades for the current date range and filters. Your mentor opens it in any browser, writes comments on days and trades, and clicks \"Download feedback\"." }));
+      const opts = {};
+      [["journal", "Include daily journal notes", true], ["tradeNotes", "Include trade notes, tags and mistakes", true], ["trades", "Include the latest 300 trades", true], ["notebook", "Include notebook notes", false]].forEach(([k, l, def]) => {
+        const lab = tzH("label", { class: "tz-check" });
+        const cb = tzH("input", { type: "checkbox" }); cb.checked = def; opts[k] = cb;
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(l));
+        share.appendChild(lab);
+      });
+      share.appendChild(tzH("button", {
+        class: "tz-btn primary", style: "margin-top:10px", text: "Download snapshot", onClick: () => {
+          const o = {}; for (const k in opts) o[k] = opts[k].checked;
+          const html = tzMentorHTML(o);
+          if (!html) { toast("Mentor mode", "No trades in the current range and filters.", "error"); return; }
+          const name = tzState.allAcc ? "All accounts" : (currentAccount() || {}).name || "account";
+          const blob = new Blob([html], { type: "text/html" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "TradeSave-mentor-" + String(name).replace(/[^\w-]+/g, "_") + "-" + tzTodayKey() + ".html";
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+          toast("Mentor mode", "Snapshot downloaded. Send the file to your mentor.", "success", 5000);
+        }
+      }));
+      g.appendChild(share);
+      const imp = tzCard("2. Import your mentor's feedback");
+      imp.appendChild(tzH("div", { class: "tz-sub", style: "line-height:1.6;margin-bottom:10px", text: "When your mentor sends back the feedback file (.json), import it here. Comments appear on the matching journal days and trades." }));
+      const fi = tzH("input", { type: "file", accept: ".json,application/json", style: "display:none" });
+      fi.addEventListener("change", () => { if (fi.files[0]) tzImportFeedback(fi.files[0]); fi.value = ""; });
+      imp.appendChild(fi);
+      imp.appendChild(tzH("button", { class: "tz-btn primary", text: "Import feedback file", onClick: () => fi.click() }));
+      g.appendChild(imp);
+      c.appendChild(g);
+      if (!fbs.length) return tzEmpty(c, "No feedback yet", "Imported mentor comments show up here, on journal days and in the trade panel.");
+      fbs.slice().sort((a, b) => b.receivedAt - a.receivedAt).forEach(fb => {
+        const card = tzCard("💬 " + fb.mentor, null, tzH("button", { class: "tz-btn sm danger", text: "Remove", onClick: () => { if (!confirm("Remove this feedback?")) return; tzMentorFeedback().feedback = tzMentorFeedback().feedback.filter(x => x.id !== fb.id); tzSave(); renderTZ(); } }));
+        card.classList.add("tz-mb");
+        card.appendChild(tzH("div", { class: "tz-sub", text: "Received " + new Date(fb.receivedAt).toLocaleString() + " · " + Object.keys(fb.days).length + " day comment(s) · " + Object.keys(fb.trades).length + " trade comment(s)" }));
+        if (fb.general) card.appendChild(tzH("div", { class: "tz-mentor-item", style: "margin-top:10px;white-space:pre-wrap", text: fb.general }));
+        const list = tzH("div", { style: "margin-top:10px" });
+        Object.keys(fb.days).sort().reverse().forEach(k => {
+          const r = tzH("div", { class: "tz-rule" });
+          r.appendChild(tzH("button", { class: "tz-link", text: tzLongDate(k), onClick: () => tzGo("journal", { focusDay: k }) }));
+          r.appendChild(tzH("span", { style: "flex:1;margin-left:14px;color:var(--tz-muted);white-space:pre-wrap", text: fb.days[k] }));
+          list.appendChild(r);
+        });
+        const base = tzBase();
+        const byTicket = new Map();
+        if (Object.keys(fb.trades).length) for (const tr of base) if (fb.trades[tr.ticket]) byTicket.set(tr.ticket, tr);
+        Object.keys(fb.trades).forEach(tk => {
+          const tr = byTicket.get(tk);
+          const r = tzH("div", { class: "tz-rule" });
+          r.appendChild(tr ? tzH("button", { class: "tz-link", text: (tr.symbol || "") + " #" + tk, onClick: () => tzOpenTrade(tr) }) : tzH("span", { class: "tz-sub", text: "#" + tk + " (not in this account)" }));
+          r.appendChild(tzH("span", { style: "flex:1;margin-left:14px;color:var(--tz-muted);white-space:pre-wrap", text: fb.trades[tk] }));
+          list.appendChild(r);
+        });
+        card.appendChild(list);
+        c.appendChild(card);
+      });
+    }
+
+    // ---------- University ----------
+    const TZ_LESSONS = [
+      { id: "l1", title: "Why journal your trades", min: 3, body: [
+        "Your broker statement tells you what happened. A journal tells you why. Without the why, you repeat the same mistakes and cannot repeat your best trades on purpose.",
+        "Journal every trading day, even red ones and especially red ones. The days you least want to write about hold the lessons that save the most money.",
+        "Keep it short and consistent: a pre-market plan, the trades you took, and a two-minute recap. Consistency beats long essays you only write once a month.",
+        "In TradeSave: press \"Start my day\" each morning, insert the Pre-market plan template, and finish with the End-of-day recap template." ] },
+      { id: "l2", title: "The numbers that matter", min: 4, body: [
+        "Win rate alone says little. A 35% win rate is excellent if winners are three times bigger than losers; a 70% win rate loses money if losers are three times bigger.",
+        "Profit factor (gross profit ÷ gross loss) combines both. Below 1.0 you lose money, 1.0 to 1.3 is fragile, above 1.5 is a solid edge in a decent sample.",
+        "Expectancy is the average result per trade. Multiply it by how many trades you take to see what your edge earns per week or month.",
+        "Max drawdown is the deepest fall from a balance high. It decides whether you can survive your strategy emotionally and financially. Check it in Reports → Drawdown." ] },
+      { id: "l3", title: "Risk per trade and R-multiples", min: 4, body: [
+        "Decide your risk in money before you enter: the amount you lose if the stop is hit. That amount is 1R.",
+        "Measure every result in R. A +2R trade made twice your planned risk; a −1.5R trade means you lost more than planned, usually from moving or skipping the stop.",
+        "Most professionals risk 0.5% to 1% of the account per trade. At 1%, ten losses in a row cost about 10%, which is survivable. At 5% they cost about 40%.",
+        "In TradeSave: enter Planned risk and Profit target on a trade. Reports → R-multiple then shows your expectancy in R and how often you reach your planned target." ] },
+      { id: "l4", title: "Build a playbook", min: 5, body: [
+        "A playbook is a written list of setups you trade, each with clear rules: when to enter, where the stop goes, where you take profit, and when not to trade it.",
+        "Write rules you can check with a yes or no. \"Wait for the 15-minute range to close\" is checkable; \"enter when it looks strong\" is not.",
+        "Tag every trade with its playbook. After 30 to 50 trades per setup, the Playbook page shows which setups actually make money and which only feel good.",
+        "Cut or rewrite setups with a profit factor below 1 over a meaningful sample. Trade more of what works." ] },
+      { id: "l5", title: "Review trades the right way", min: 4, body: [
+        "Judge the decision, not the outcome. A trade that followed every rule and lost is a good trade. A rule-breaking trade that won is a dangerous one: it teaches the wrong habit.",
+        "For each trade ask: Was it in my playbook? Did I follow every rule? Was the size right? Did I exit where planned?",
+        "Mark mistakes honestly with mistake tags and give each trade a rating. Reports → Mistakes then shows what each mistake costs you in money.",
+        "Review weekly with the Weekly review template. Pick one mistake to remove next week, not five." ] },
+      { id: "l6", title: "Trading psychology basics", min: 4, body: [
+        "Most account damage comes from a few emotional trades: revenge after a loss, FOMO into a move, or adding to a loser.",
+        "Set circuit breakers before the session: a daily loss limit and a maximum number of trades. Stop when either is hit, no exceptions.",
+        "Check Insights for your win rate after a losing trade. If it drops, add a rule like a 10-minute pause after every loss.",
+        "Use the Progress Tracker to make good habits visible. Streaks of rule-following days build discipline faster than willpower alone." ] },
+      { id: "l7", title: "Backtests vs live trading", min: 3, body: [
+        "A backtest shows what rules would have done. Live results add slippage, spreads, missed fills and your own emotions.",
+        "Import both into separate accounts and compare them with Reports → Compare or by switching accounts. Large gaps usually point to execution, not the strategy.",
+        "Treat backtest drawdowns as the minimum you should expect live. Size positions so that twice the backtest drawdown is still acceptable." ] },
+      { id: "l8", title: "Turning data into improvements", min: 4, body: [
+        "Look for patterns, not single trades: best and worst hours, weekdays, symbols, holding times. Insights lists these for you.",
+        "Change one thing at a time, for example stop trading the worst hour, then measure for two to four weeks with the date range filter.",
+        "Set a Challenge for the change (for example: keep daily loss under your limit for 10 trading days) so you get clear feedback.",
+        "Share a snapshot with a mentor through Mentor mode. A second pair of eyes spots habits you no longer see." ] },
+    ];
+    function tzPageUniversity(c) {
+      const store = tzAcc();
+      store.lessonsDone = store.lessonsDone || {};
+      const done = store.lessonsDone;
+      const open = tzState.lesson ? TZ_LESSONS.find(l => l.id === tzState.lesson) : null;
+      if (open) {
+        const i = TZ_LESSONS.indexOf(open);
+        const bar = tzH("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px" });
+        bar.appendChild(tzH("button", { class: "tz-btn sm", text: "← All lessons", onClick: () => { tzState.lesson = null; renderTZ(); } }));
+        bar.appendChild(tzH("span", { class: "tz-sub", text: "Lesson " + (i + 1) + " of " + TZ_LESSONS.length + " · " + open.min + " min read" }));
+        c.appendChild(bar);
+        const card = tzH("div", { class: "tz-card tz-lesson" });
+        card.appendChild(tzH("h2", { text: open.title }));
+        open.body.forEach(p => card.appendChild(tzH("p", { text: p })));
+        const act = tzH("div", { style: "display:flex;justify-content:space-between;gap:10px;margin-top:20px;flex-wrap:wrap" });
+        act.appendChild(tzH("button", { class: "tz-btn" + (done[open.id] ? "" : " primary"), text: done[open.id] ? "✓ Completed (click to undo)" : "Mark as complete", onClick: () => { if (done[open.id]) delete done[open.id]; else done[open.id] = Date.now(); tzSave(); renderTZ(); } }));
+        if (i + 1 < TZ_LESSONS.length) act.appendChild(tzH("button", { class: "tz-btn", text: "Next: " + TZ_LESSONS[i + 1].title + " →", onClick: () => { if (!done[open.id]) { done[open.id] = Date.now(); tzSave(); } tzState.lesson = TZ_LESSONS[i + 1].id; renderTZ(); window.scrollTo(0, 0); } }));
+        card.appendChild(act);
+        c.appendChild(card);
+        return;
+      }
+      const n = TZ_LESSONS.filter(l => done[l.id]).length;
+      const top = tzH("div", { class: "tz-card tz-mb" });
+      top.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b>Your progress</b><span class="tz-sub">' + n + " of " + TZ_LESSONS.length + " lessons</span></div>";
+      const pr = tzH("div", { class: "tz-progress" });
+      pr.innerHTML = '<div style="width:' + (n / TZ_LESSONS.length * 100).toFixed(1) + '%"></div>';
+      top.appendChild(pr);
+      c.appendChild(top);
+      const grid = tzH("div", { class: "tz-grid tz-g3" });
+      TZ_LESSONS.forEach((l, i) => {
+        const card = tzH("div", { class: "tz-card tz-pb-card", onClick: () => { tzState.lesson = l.id; renderTZ(); window.scrollTo(0, 0); } });
+        card.innerHTML = '<div class="tz-sub">Lesson ' + (i + 1) + " · " + l.min + ' min</div><div class="tz-pb-name">' + escapeHtml(l.title) + '</div><div class="tz-pb-desc">' + escapeHtml(l.body[0].slice(0, 110)) + "…</div>" +
+          '<div><span class="tz-status ' + (done[l.id] ? "done" : "upcoming") + '">' + (done[l.id] ? "Completed" : "Not started") + "</span></div>";
+        grid.appendChild(card);
+      });
+      c.appendChild(grid);
+    }
+
+    // ---------- TZ Settings: tags, mistakes, data ----------
+    function tzPageSettings(c) {
+      const store = tzAcc();
+      const base = tzBase();
+      const count = field => { const m = new Map(); for (const tr of base) for (const v of (tr[field] || [])) m.set(v, (m.get(v) || 0) + 1); return m; };
+      const g = tzH("div", { class: "tz-grid tz-g2 tz-mb" });
+      const listCard = (title, field, names, onRename, onDelete, onAdd) => {
+        const card = tzCard(title, null, onAdd ? tzH("button", { class: "tz-btn sm", text: "+ Add", onClick: onAdd }) : null);
+        const counts = count(field);
+        const all = Array.from(new Set(names.concat(Array.from(counts.keys())))).sort((a, b) => a.localeCompare(b));
+        if (!all.length) card.appendChild(tzH("div", { class: "tz-sub", text: "None yet." }));
+        all.forEach(name => {
+          const r = tzH("div", { class: "tz-rule" });
+          r.appendChild(tzH("span", { text: name }));
+          const right = tzH("div", { style: "display:flex;gap:6px;align-items:center" });
+          right.appendChild(tzH("span", { class: "tz-pill", text: fmtInt(counts.get(name) || 0) + " trades" }));
+          right.appendChild(tzH("button", { class: "tz-btn sm", text: "Rename", onClick: () => { const v = (prompt("Rename \"" + name + "\" to", name) || "").trim(); if (v && v !== name) onRename(name, v); } }));
+          right.appendChild(tzH("button", { class: "tz-btn sm danger", text: "Delete", onClick: () => { if (confirm("Remove \"" + name + "\" from all " + (counts.get(name) || 0) + " trades?")) onDelete(name); } }));
+          r.appendChild(right);
+          card.appendChild(r);
+        });
+        return card;
+      };
+      const renameIn = async (field, from, to) => {
+        const list = base.filter(tr => (tr[field] || []).includes(from));
+        await tzBulkUpdate(list, tr => { tr[field] = Array.from(new Set(tr[field].map(x => x === from ? to : x))); });
+      };
+      const removeIn = async (field, name) => {
+        const list = base.filter(tr => (tr[field] || []).includes(name));
+        await tzBulkUpdate(list, tr => { tr[field] = tr[field].filter(x => x !== name); });
+      };
+      g.appendChild(listCard("Tags", "tags", [], async (a, b) => { await renameIn("tags", a, b); renderTZ(); }, async a => { await removeIn("tags", a); renderTZ(); }));
+      g.appendChild(listCard("Mistakes", "mistakes", store.mistakeList,
+        async (a, b) => { store.mistakeList = Array.from(new Set(store.mistakeList.map(x => x === a ? b : x))); tzSave(); await renameIn("mistakes", a, b); renderTZ(); },
+        async a => { store.mistakeList = store.mistakeList.filter(x => x !== a); tzSave(); await removeIn("mistakes", a); renderTZ(); },
+        () => { const v = (prompt("New mistake") || "").trim(); if (v && !store.mistakeList.includes(v)) { store.mistakeList.push(v); tzSave(); renderTZ(); } }));
+      c.appendChild(g);
+      const data = tzCard("Data");
+      const row = tzH("div", { style: "display:flex;gap:10px;flex-wrap:wrap" });
+      row.appendChild(tzH("button", { class: "tz-btn primary", text: "Export trades to CSV (current range & filters)", onClick: () => tzExportCSV(tzTrades()) }));
+      row.appendChild(tzH("button", { class: "tz-btn", text: "Accounts, backup & restore", onClick: async () => { await tzSetMode(false); switchTab("settings"); } }));
+      data.appendChild(row);
+      data.appendChild(tzH("div", { class: "tz-sub", style: "margin-top:10px", text: "Journal notes, notebook, playbooks, templates, challenges and progress rules are stored in this browser per account." }));
+      c.appendChild(data);
     }
 
     // ---------- wiring ----------
