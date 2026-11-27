@@ -1469,6 +1469,21 @@
       font-variant-numeric: tabular-nums;
     }
 
+    :root[data-theme="light"] .chart-tip {
+      background: rgba(255, 255, 255, 0.97);
+      color: var(--text);
+      border-color: var(--border2);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+    }
+
+    html.tz-on .chart-tip {
+      background: var(--tz-card);
+      color: var(--tz-text);
+      border-color: var(--tz-border2);
+    }
+
+    html.tz-on[data-theme="light"] .chart-tip { box-shadow: 0 8px 24px rgba(28, 29, 51, 0.14); }
+
     .chart-tip-row {
       display: flex;
       align-items: center;
@@ -2706,6 +2721,132 @@
     .tz-lesson p { font-size: 14.5px; line-height: 1.7; margin: 0 0 14px; }
     .tz-drawer-f .danger, .tz-btn.danger { color: var(--tz-red, #F04438); }
 </style>
+  <style id="mobile-style">
+    /* ===== Classic view: phones and tablets ===== */
+    @media (max-width: 900px) {
+      .app { flex-direction: column; }
+      .sidebar {
+        position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: 100%; height: 62px;
+        flex-direction: row; padding: 0; border-right: 0; border-top: 1px solid var(--border);
+        z-index: 100; background: var(--bg2); overflow: visible;
+      }
+      .sidebar .nav { display: flex; flex-direction: row; width: 100%; padding: 0 4px; margin: 0; align-items: stretch; overflow-x: auto; overflow-y: hidden; gap: 0; scrollbar-width: none; }
+      .sidebar .nav::-webkit-scrollbar { display: none; }
+      .sidebar .ns { display: none; }
+      .sidebar .ni { flex: 1 0 66px; flex-direction: column; justify-content: center; align-items: center; gap: 3px; padding: 6px 4px; min-width: 66px; margin: 0; border-radius: 0; text-align: center; }
+      .sidebar .ni::before { display: none; }
+      .sidebar .ni.active { background: transparent; color: var(--accent); }
+      .sidebar .nav-label { display: block; font-size: 10px; white-space: nowrap; }
+      .sidebar .nb { position: absolute; margin: 0; transform: translate(14px, -12px); }
+      .sidebar .logo {
+        position: fixed; top: 0; left: 0; right: 0; height: 54px; z-index: 101; margin: 0;
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 0 10px 0 12px; background: var(--bg2); border-bottom: 1px solid var(--border); text-align: left;
+      }
+      .sidebar .logo-row { margin: 0; }
+      .sidebar .logo-title, .sidebar .logo-sub { display: none; }
+      .sidebar .lang-toggle { display: flex; margin: 0; gap: 4px; flex-shrink: 0; }
+      .sidebar .lang-toggle button { padding: 6px 9px; }
+      .sidebar .accs {
+        display: flex; position: fixed; top: 9px; left: 58px; right: 182px; height: 36px; z-index: 102;
+        padding: 0; margin: 0; border: 0; background: none; align-items: center; gap: 6px;
+      }
+      .sidebar .accs .accl { display: none; }
+      .sidebar .accs select { height: 36px; margin: 0; flex: 1; min-width: 0; width: auto; }
+      .sidebar .accs-actions { margin: 0; flex-shrink: 0; }
+      .sidebar .accs-actions button { height: 36px; padding: 0 10px; margin: 0; white-space: nowrap; }
+      .main { padding-top: 54px; padding-bottom: 62px; min-height: 100vh; }
+      .ph { top: 54px; padding: 12px 16px; flex-wrap: wrap; }
+      .ha { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+      .ha > * { flex-shrink: 0; }
+      .page-body { padding: 16px 14px 24px; }
+      .toast-stack { top: 64px; bottom: auto; left: 12px; right: 12px; max-width: none; }
+      .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .grid-4, .grid-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .modal { width: 94vw; max-width: 94vw; max-height: 88vh; overflow-y: auto; }
+    }
+    @media (max-width: 600px) {
+      .grid-2, .grid-3, .grid-4, .grid-6 { grid-template-columns: minmax(0, 1fr); }
+      .sidebar .accs { right: 160px; }
+      .sidebar .accs-actions button { font-size: 0; width: 36px; padding: 0; }
+      .sidebar .accs-actions button::before { content: "+"; font-size: 18px; line-height: 1; }
+      .sidebar .lang-toggle button { padding: 6px 7px; font-size: 11px; }
+      .pt { font-size: 18px; }
+      .card { padding: 14px; min-width: 0; }
+      .kpi { min-width: 0; }
+      .kpi-value, .kpi-row .kpi-value { font-size: 20px; overflow-wrap: anywhere; }
+      canvas { max-width: 100%; }
+      .cal-day { min-height: 58px; padding: 5px 1px; gap: 1px; min-width: 0; }
+      .cal-day .day-num { font-size: 12px; margin: 0; }
+      .cal-day .day-pnl { font-size: 9.5px; letter-spacing: -.3px; white-space: nowrap; overflow: hidden; max-width: 100%; }
+      .cal-day .day-pct, .cal-day .day-trades { display: none; }
+      .cal-day-header { font-size: 9px; letter-spacing: 0; padding: 6px 0; }
+    }
+    .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .cal-day { min-width: 0; }
+
+    /* ===== TZ view: tablets ===== */
+    @media (max-width: 1180px) {
+      .tz-top .tz-start span { display: none; }
+      .tz-top .tz-start { padding: 0 10px; }
+    }
+    @media (max-width: 1024px) {
+      .tz-top { height: auto; min-height: 64px; padding: 10px 18px; flex-wrap: wrap; row-gap: 8px; }
+      .tz-top-r { flex-wrap: wrap; }
+      .tz-content { padding: 18px 18px 40px; }
+      .tz-nb { grid-template-columns: 200px minmax(0, 1fr); }
+      .tz-nb > :nth-child(3) { grid-column: 1 / -1; }
+    }
+    @media (min-width: 761px) and (max-width: 1024px) { .tz-g5, .tz-g4, .tz-g3, .tz-g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .tz-burger { display: none; }
+    .tz-side-bg { display: none; }
+
+    /* ===== TZ view: phones ===== */
+    @media (max-width: 760px) {
+      .tz-shell { display: block; }
+      .tz-side {
+        position: fixed; left: 0; top: 0; bottom: 0; height: auto; width: 260px; padding: 18px 14px;
+        z-index: 960; transform: translateX(-105%); transition: transform .2s ease;
+      }
+      html.tz-nav-open .tz-side { transform: none; box-shadow: 8px 0 40px rgba(0, 0, 0, .35); }
+      html.tz-nav-open .tz-side-bg { display: block; position: fixed; inset: 0; background: rgba(10, 10, 25, .45); z-index: 955; }
+      .tz-brand span, .tz-ni span, .tz-add span { display: inline; }
+      .tz-burger { display: inline-flex; flex: none; }
+      .tz-top { padding: 8px 12px; gap: 8px; min-height: 0; }
+      .tz-title { font-size: 17px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      .tz-top-r { width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+      .tz-top-r > * { flex: none; }
+      html.tz-on .tz-top-r .tz-select { flex: 1 1 130px; min-width: 0; max-width: none; }
+      .tz-content { padding: 12px 12px 40px; }
+      .tz-card { padding: 14px; }
+      .tz-card.flush { padding: 0; }
+      .tz-mb { margin-bottom: 12px; }
+      .tz-grid { gap: 12px; }
+      .tz-g5, .tz-g4 { grid-template-columns: minmax(0, 1fr); }
+      .tz-cal { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+      .tz-week, .tz-cal-wk { display: none; }
+      .tz-cal-dow { font-size: 10.5px; }
+      .tz-day { min-height: 50px; padding: 3px 2px; border-radius: 6px; }
+      .tz-day .dn { font-size: 9.5px; text-align: center; }
+      .tz-day .dp { font-size: 9px; margin-top: 4px; letter-spacing: -.3px; white-space: nowrap; overflow: hidden; }
+      .tz-day .dt { display: none; }
+      .tz-cal-title { min-width: 0; font-size: 14px; }
+      .tz-jday-grid { grid-template-columns: minmax(0, 1fr); }
+      .tz-jday-h { padding: 12px 14px; flex-wrap: wrap; }
+      .tz-jday-b { padding: 12px 14px; }
+      .tz-kv { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+      .tz-nb { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+      .tz-nb > * { border-right: 0 !important; }
+      .tz-pop { position: fixed; top: 112px; left: 8px; right: 8px; width: auto; max-width: none; max-height: calc(100vh - 130px); }
+      .tz-year { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .tz-tabs { margin-left: -2px; }
+      .tz-lesson { padding: 18px; }
+      .tz-pager { flex-wrap: wrap; gap: 8px; }
+      .tz-drawer-f { flex-wrap: wrap; }
+      html.tz-on .tz-input[style*="width:240px"] { width: 100% !important; }
+    }
+  </style>
 </head>
 
 <body>
@@ -2991,7 +3132,7 @@
         "settings.language": "Language", "settings.theme": "Theme", "settings.dark": "Dark", "settings.light": "Light",
         "settings.backup": "Backup all data", "settings.restore": "Restore from backup", "settings.about": "About",
         "settings.aboutText": "All data is stored locally in your browser's IndexedDB. Use Backup regularly to avoid data loss.",
-        "settings.dangerZone": "Danger zone", "settings.deleteAll": "Delete all data", "settings.deleteAllConfirm": "This will permanently delete ALL accounts, trades, strategies and logs. Continue?",
+        "settings.accounts": "Accounts", "settings.dangerZone": "Danger zone", "settings.deleteAll": "Delete all data", "settings.deleteAllConfirm": "This will permanently delete ALL accounts, trades, strategies and logs. Continue?",
         "settings.deleteAccountData": "Delete account data", "settings.deleteAccountDataConfirm": "This will delete all trades, strategies and logs for this account. The account will be kept. Continue?",
         "weekday.0": "Sunday", "weekday.1": "Monday", "weekday.2": "Tuesday", "weekday.3": "Wednesday",
         "weekday.4": "Thursday", "weekday.5": "Friday", "weekday.6": "Saturday",
@@ -5977,10 +6118,14 @@
       // Bars animate by scaling their height (anchored at the baseline).
       function drawBars(progress) {
         bars.forEach(b => {
-          let grad = ctx.createLinearGradient(0, b.baseline, 0, b.yTop);
-          grad.addColorStop(0, b.color + "99");
-          grad.addColorStop(1, b.color);
-          ctx.fillStyle = grad;
+          const far = b.baseline + b.signedH * progress;
+          if (Math.abs(far - b.baseline) < 1) ctx.fillStyle = b.color;
+          else {
+            const grad = ctx.createLinearGradient(0, b.baseline, 0, far);
+            grad.addColorStop(0, b.color + "99");
+            grad.addColorStop(1, b.color);
+            ctx.fillStyle = grad;
+          }
           fillRoundedBar(ctx, b.x, b.baseline, b.w, b.signedH * progress, corner);
         });
       }
@@ -10447,6 +10592,7 @@
       prefCard.appendChild(el("div", { class: "grid grid-1" }, [
         el("div", { class: "form-row" }, [
           el("label", { text: t("settings.theme") }),
+          (() => { const ts = el("select", { onChange: e => setTheme(e.target.value) }, [el("option", { value: "dark", text: "Dark" }), el("option", { value: "light", text: "Light" })]); ts.value = state.theme; return ts; })(),
         ]),
       ]));
       root.appendChild(prefCard);
@@ -10476,21 +10622,27 @@
       // Danger zone
       const dangerCard = el("div", { class: "card", style: "border-color:var(--red)" });
       dangerCard.appendChild(el("div", { class: "card-header" }, [el("h3", { text: t("settings.dangerZone"), style: "color:var(--red)" })]));
-      dangerCard.appendChild(el("button", {
-        class: "btn btn-danger", text: t("settings.deleteAll"), onClick: async () => {
-          if (importSaveGuard()) return;
-          if (!await confirmModal(t("settings.deleteAll"), t("settings.deleteAllConfirm"))) return;
-          await dbClear("accounts"); await dbClear("trades"); await dbClear("strategies"); await dbClear("logs");
-          state.accounts = []; state.trades = []; state.strategies = []; state.logs = []; state.activeAccountId = null;
-          await setMeta("activeAccountId", null);
-          toast(t("toast.dataDeleted"), "", "success");
-          renderAccountSelect();
-          renderActiveTab();
-        }
-      }));
+      dangerCard.appendChild(el("button", { class: "btn btn-danger", text: t("settings.deleteAll"), onClick: deleteAllDataAction }));
       dangerCard.appendChild(el("div", { style: "height:10px" }));
-      dangerCard.appendChild(el("button", {
-        class: "btn btn-danger", text: t("settings.deleteAccountData"), onClick: async () => {
+      dangerCard.appendChild(el("button", { class: "btn btn-danger", text: t("settings.deleteAccountData"), onClick: deleteAccountDataAction }));
+      root.appendChild(dangerCard);
+    }
+
+    async function deleteAllDataAction() {
+      if (importSaveGuard()) return;
+      if (!await confirmModal(t("settings.deleteAll"), t("settings.deleteAllConfirm"))) return;
+      await dbClear("accounts"); await dbClear("trades"); await dbClear("strategies"); await dbClear("logs");
+      state.accounts = []; state.trades = []; state.strategies = []; state.logs = []; state.activeAccountId = null;
+      await setMeta("activeAccountId", null);
+      // TZ journal, notebook, playbooks etc. are account data too
+      tzStore = { v: 1, accounts: {} }; tzState.allAcc = false;
+      await setMeta("tz:store", tzStore);
+      invalidateTradeCache();
+      toast(t("toast.dataDeleted"), "", "success");
+      renderAccountSelect();
+      renderActiveTab();
+    }
+    async function deleteAccountDataAction() {
           if (importSaveGuard()) return;
           var acc = currentAccount();
           if (!acc) { toast(t("import.title"), t("import.noAccount"), "error"); return; }
@@ -10509,14 +10661,13 @@
           state.strategies = state.strategies.filter(function (s) { return s.accountId !== acc.id; });
           state.logs = state.logs.filter(function (l) { return l.accountId !== acc.id; });
           toast(t("toast.accountDataDeleted") || ("Deleted data for " + acc.name), "", "success");
+          invalidateTradeCache();
+          renderAccountSelect();
           renderActiveTab();
-        }
-      }));
-      root.appendChild(dangerCard);
     }
 
     // === Account form & management ===
-    function openAccountForm(existing) {
+    function openAccountForm(existing, onSaved) {
       const formState = existing || { name: "", number: "", broker: "", startingBalance: 0, currency: "USD" };
       const form = el("div", {}, [
         el("div", { class: "form-row" }, [
@@ -10586,7 +10737,8 @@
               closeModal();
               toast(existing ? t("toast.accountUpdated") : t("toast.accountCreated"), "", "success");
               renderAccountSelect();
-              renderActiveTab();
+              if (typeof onSaved === "function") await onSaved(payload);
+              else renderActiveTab();
             }
           }),
         ]),
@@ -10654,6 +10806,7 @@
         trades: state.trades,
         strategies: state.strategies,
         logs: state.logs.slice(0, 5000),
+        tz: tzStore,
         meta: {
           language: state.language,
           theme: state.theme,
@@ -10720,6 +10873,11 @@
         state.strategies = strategies;
         state.trades = trades;
         state.logs = (await dbGetAll("logs")).sort((a, b) => b.timestamp - a.timestamp);
+        if (data.tz && data.tz.accounts) {
+          for (const id in data.tz.accounts) tzStore.accounts[id] = data.tz.accounts[id];
+          await setMeta("tz:store", tzStore);
+        }
+        invalidateTradeCache();
         if (data.meta && data.meta.activeAccountId && accounts.find(a => a.id === data.meta.activeAccountId)) {
           state.activeAccountId = data.meta.activeAccountId;
           await setMeta("activeAccountId", state.activeAccountId);
@@ -11074,6 +11232,7 @@
     // ---------- mode ----------
     function tzIsOn() { return document.documentElement.classList.contains("tz-on"); }
     async function tzSetMode(on) {
+      document.documentElement.classList.remove("tz-nav-open");
       document.documentElement.classList.toggle("tz-on", on);
       const b = document.getElementById("tzModeBtn");
       if (b) b.classList.toggle("active", on);
@@ -11084,6 +11243,7 @@
       try { await setMeta("uiMode", on ? "tz" : "classic"); } catch (e) { console.error(e); }
     }
     function tzGo(page, opts) {
+      document.documentElement.classList.remove("tz-nav-open");
       tzState.page = page;
       if (opts && opts.focusDay) tzState.journalFocus = opts.focusDay;
       if (opts && opts.playbook !== undefined) tzState.pbOpen = opts.playbook;
@@ -11269,13 +11429,17 @@
       foot.appendChild(setBtn); foot.appendChild(classicBtn);
       side.appendChild(foot);
       shell.appendChild(side);
+      shell.appendChild(tzH("div", { class: "tz-side-bg", onClick: () => document.documentElement.classList.remove("tz-nav-open") }));
 
       const main = tzH("div", { class: "tz-main" });
       const top = tzH("header", { class: "tz-top" });
+      const burger = tzH("button", { class: "tz-btn sm ghost tz-burger", title: "Menu", onClick: () => document.documentElement.classList.add("tz-nav-open") });
+      burger.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+      top.appendChild(burger);
       const titleMap = Object.assign(Object.fromEntries(TZ_NAV), { mentor: "Mentor Mode", settings: "Settings" });
       top.appendChild(tzH("div", { class: "tz-title", text: titleMap[page] }));
       const tr = tzH("div", { class: "tz-top-r" });
-      const startBtn = tzH("button", { class: "tz-btn primary", onClick: () => tzGo("journal", { focusDay: tzTodayKey() }) });
+      const startBtn = tzH("button", { class: "tz-btn primary tz-start", onClick: () => tzGo("journal", { focusDay: tzTodayKey() }) });
       startBtn.innerHTML = tzIcon("sunrise", 16) + "<span>Start my day</span>";
       tr.appendChild(startBtn);
       tr.appendChild(tzFilterButton());
@@ -11286,11 +11450,18 @@
       tr.appendChild(rangeSel);
       const accSel = tzH("select", { class: "tz-select", title: "Account" });
       if (!state.accounts.length) accSel.appendChild(tzH("option", { value: "", text: "No account" }));
+      accSel.classList.add("tz-acc-sel");
       if (state.accounts.length > 1) accSel.appendChild(tzH("option", { value: "__all__", text: "All accounts" }));
       for (const a of state.accounts) accSel.appendChild(tzH("option", { value: a.id, text: a.name }));
+      accSel.appendChild(tzH("option", { value: "__new__", text: "+ Add new account" }));
       if (tzState.allAcc && state.accounts.length < 2) tzState.allAcc = false;
       accSel.value = tzState.allAcc ? "__all__" : (state.activeAccountId || "");
       accSel.addEventListener("change", () => {
+        if (accSel.value === "__new__") {
+          accSel.value = tzState.allAcc ? "__all__" : (state.activeAccountId || "");
+          tzNewAccount();
+          return;
+        }
         tzState.log.sel.clear(); tzState.f = tzEmptyFilters(); tzState.log.page = 0;
         if (accSel.value === "__all__") { tzState.allAcc = true; renderTZ(); return; }
         const same = accSel.value === state.activeAccountId;
@@ -11310,8 +11481,8 @@
       shell.appendChild(main);
       root.appendChild(shell);
 
-      if (!currentAccount()) {
-        tzEmpty(content, "Create an account first", "Trades are stored per account.", [tzH("button", { class: "tz-btn primary", text: "+ Create account", onClick: () => openAccountForm(null) })]);
+      if (!currentAccount() && page !== "settings") {
+        tzEmpty(content, "Create an account first", "Trades are stored per account.", [tzH("button", { class: "tz-btn primary", text: "+ Create account", onClick: () => tzNewAccount() })]);
         return;
       }
       try { TZ_PAGES[page](content); }
@@ -11414,7 +11585,7 @@
         card.appendChild(head);
         const grid = tzH("div", { class: "tz-cal" });
         TZ_DOW.forEach(d => grid.appendChild(tzH("div", { class: "tz-cal-dow", text: d })));
-        grid.appendChild(tzH("div", { class: "tz-cal-dow", text: "Week" }));
+        grid.appendChild(tzH("div", { class: "tz-cal-dow tz-cal-wk", text: "Week" }));
         const today = tzTodayKey();
         const startOffset = first.getDay();
         const cells = Math.ceil((startOffset + dim) / 7) * 7;
@@ -13609,7 +13780,45 @@
     }
 
     // ---------- TZ Settings: tags, mistakes, data ----------
+    function tzNewAccount() {
+      openAccountForm(null, async acc => { tzState.allAcc = false; await setActiveAccount(acc.id); });
+    }
+    function tzAccountsCard() {
+      const card = tzCard("Accounts", null, tzH("button", { class: "tz-btn sm primary", text: "+ New account", onClick: () => tzNewAccount() }));
+      card.classList.add("tz-mb");
+      const counts = new Map();
+      for (const tr of state.trades) { let r = counts.get(tr.accountId); if (!r) { r = { n: 0, net: 0, w: 0 }; counts.set(tr.accountId, r); } r.n++; r.net += tr.netProfit; if (tr.netProfit > 0) r.w++; }
+      if (!state.accounts.length) card.appendChild(tzH("div", { class: "tz-sub", text: "No accounts yet." }));
+      const tbl = tzH("table", { class: "tz-table" });
+      let h = '<thead><tr><th>Account</th><th>Broker / number</th><th class="num">Starting balance</th><th class="num">Trades</th><th class="num">Win %</th><th class="num">Net P&amp;L</th><th></th></tr></thead><tbody>';
+      state.accounts.forEach((a, i) => {
+        const r = counts.get(a.id) || { n: 0, net: 0, w: 0 };
+        const active = a.id === state.activeAccountId && !tzState.allAcc;
+        h += "<tr><td><b>" + escapeHtml(a.name) + "</b>" + (active ? ' <span class="tz-pill">Active</span>' : "") + "</td><td>" + escapeHtml([a.broker, a.number && "#" + a.number].filter(Boolean).join(" · ") || "—") +
+          '</td><td class="num">' + escapeHtml(fmtNum(+a.startingBalance || 0, 2) + " " + (a.currency || "")) + '</td><td class="num">' + fmtInt(r.n) + '</td><td class="num">' + fmtPct(r.n ? r.w / r.n : 0, 1) +
+          '</td><td class="num ' + tzMoneyCls(r.net) + '">' + escapeHtml(fmtMoney(r.net, 2)) + '</td><td class="num tz-acc-act">' +
+          (active ? "" : '<button class="tz-btn sm" data-act="use" data-i="' + i + '">Switch</button>') +
+          '<button class="tz-btn sm" data-act="edit" data-i="' + i + '">Edit</button><button class="tz-btn sm danger" data-act="del" data-i="' + i + '">Delete</button></td></tr>';
+      });
+      tbl.innerHTML = h + "</tbody>";
+      tbl.addEventListener("click", async e => {
+        const b = e.target.closest("button[data-act]");
+        if (!b) return;
+        const a = state.accounts[+b.dataset.i];
+        if (!a) return;
+        if (b.dataset.act === "use") { tzState.allAcc = false; await setActiveAccount(a.id); }
+        else if (b.dataset.act === "edit") openAccountForm(a);
+        else if (await confirmModal("Delete account", "Delete \"" + a.name + "\" with all its trades, strategies and logs? This cannot be undone.")) {
+          await deleteAccount(a.id);
+          if (tzStore.accounts[a.id]) { delete tzStore.accounts[a.id]; tzSave(); }
+        }
+      });
+      if (state.accounts.length) { const w = tzH("div", { style: "overflow-x:auto" }); w.appendChild(tbl); card.appendChild(w); }
+      return card;
+    }
     function tzPageSettings(c) {
+      c.appendChild(tzAccountsCard());
+      if (!currentAccount()) return;
       const store = tzAcc();
       const base = tzBase();
       const count = field => { const m = new Map(); for (const tr of base) for (const v of (tr[field] || [])) m.set(v, (m.get(v) || 0) + 1); return m; };
@@ -13647,11 +13856,54 @@
       c.appendChild(g);
       const data = tzCard("Data");
       const row = tzH("div", { style: "display:flex;gap:10px;flex-wrap:wrap" });
-      row.appendChild(tzH("button", { class: "tz-btn primary", text: "Export trades to CSV (current range & filters)", onClick: () => tzExportCSV(tzTrades()) }));
-      row.appendChild(tzH("button", { class: "tz-btn", text: "Accounts, backup & restore", onClick: async () => { await tzSetMode(false); switchTab("settings"); } }));
+      row.appendChild(tzH("button", { class: "tz-btn primary", text: "Export trades to CSV", title: "Current range and filters", onClick: () => tzExportCSV(tzTrades()) }));
+      row.appendChild(tzH("button", { class: "tz-btn", text: "⬇ Backup everything", onClick: doBackup }));
+      row.appendChild(tzH("button", { class: "tz-btn", text: "⬆ Restore backup", onClick: () => $("#hiddenJsonInput").click() }));
       data.appendChild(row);
-      data.appendChild(tzH("div", { class: "tz-sub", style: "margin-top:10px", text: "Journal notes, notebook, playbooks, templates, challenges and progress rules are stored in this browser per account." }));
+      data.appendChild(tzH("div", { class: "tz-sub", style: "margin-top:10px;line-height:1.6", text: "The backup file holds accounts, trades, strategies, and all TZ data (journal, notebook, playbooks, templates, challenges, progress rules, mentor feedback). Restore merges it into what is here." }));
+      data.classList.add("tz-mb");
       c.appendChild(data);
+
+      const g2 = tzH("div", { class: "tz-grid tz-g2 tz-mb" });
+      const pref = tzCard("Preferences");
+      const prow = (label, ctl) => { const r = tzH("div", { class: "tz-rule" }); r.appendChild(tzH("span", { text: label })); r.appendChild(ctl); pref.appendChild(r); };
+      const th = tzH("select", { class: "tz-select" });
+      [["light", "Light"], ["dark", "Dark"]].forEach(([v, l]) => th.appendChild(tzH("option", { value: v, text: l })));
+      th.value = state.theme;
+      th.addEventListener("change", () => setTheme(th.value));
+      prow("Theme", th);
+      const langSel = document.getElementById("langSelect");
+      if (langSel && langSel.options.length > 1) {
+        const ls = tzH("select", { class: "tz-select" });
+        Array.from(langSel.options).forEach(o => ls.appendChild(tzH("option", { value: o.value, text: o.textContent })));
+        ls.value = langSel.value;
+        ls.addEventListener("change", () => { langSel.value = ls.value; langSel.dispatchEvent(new Event("change")); });
+        prow("Language (classic view)", ls);
+      }
+      prow("Layout", tzH("button", { class: "tz-btn sm", text: "Switch to classic view", onClick: () => tzSetMode(false) }));
+      g2.appendChild(pref);
+      const info = tzCard("Storage");
+      info.innerHTML += '<div class="tz-dl" style="margin:0">' + [["Database", DB_NAME], ["Schema version", String(SCHEMA_VERSION)], ["App version", APP_VERSION], ["Origin", location.origin && location.origin !== "null" ? location.origin : "(file://)"],
+        ["Accounts", fmtInt(state.accounts.length)], ["Trades (all accounts)", fmtInt(state.trades.length)]].map(([k, v]) => "<div><span>" + escapeHtml(k) + "</span><b>" + escapeHtml(v) + "</b></div>").join("") + "</div>" +
+        '<div class="tz-sub" style="margin-top:10px;line-height:1.6">Everything is stored in this browser only. Clearing site data deletes it, so keep a backup.</div>';
+      g2.appendChild(info);
+      c.appendChild(g2);
+
+      const danger = tzCard("Danger zone");
+      danger.classList.add("tz-danger");
+      const dz = (title, text, btn, fn) => {
+        const r = tzH("div", { class: "tz-rule" });
+        const l = tzH("div");
+        l.appendChild(tzH("b", { text: title }));
+        l.appendChild(tzH("div", { class: "tz-sub", text }));
+        r.appendChild(l);
+        r.appendChild(tzH("button", { class: "tz-btn sm danger", text: btn, onClick: fn }));
+        danger.appendChild(r);
+      };
+      const ca = currentAccount();
+      dz("Delete account data", "Deletes all trades, strategies and logs of " + (ca ? "\"" + ca.name + "\"" : "the active account") + ". The account itself is kept.", "Delete account data", deleteAccountDataAction);
+      dz("Delete all data", "Deletes every account, trade, strategy, log and all TZ data in this browser.", "Delete all data", deleteAllDataAction);
+      c.appendChild(danger);
     }
 
     // ---------- wiring ----------
